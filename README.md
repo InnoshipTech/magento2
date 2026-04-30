@@ -10,7 +10,8 @@
 In the client Magento project:
 
 ```bash
-composer require innoship/module-innoship
+composer config repositories.innoship vcs https://github.com/InnoshipTech/magento2.git
+composer require innoship/module-innoship:^1.3
 bin/magento module:enable InnoShip_InnoShip
 bin/magento setup:upgrade
 bin/magento cache:flush
