@@ -1,0 +1,19 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * City selector initialization for customer address form
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ */
+?>
+<script type="text/x-magento-init">
+{
+    "#form-validate": {
+        "InnoShip_InnoShip/js/customer-address-city": {
+            "ajaxUrl": "<?= $block->escapeUrl($block->getUrl('innoshipf/city/getcity')) ?>"
+        }
+    }
+}
+</script>

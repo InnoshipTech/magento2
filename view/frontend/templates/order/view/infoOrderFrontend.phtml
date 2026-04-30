@@ -1,0 +1,39 @@
+<?php
+/** @var \Magento\Framework\View\Element\Template $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$escaper = $block->getData('escaper') ?: \Magento\Framework\App\ObjectManager::getInstance()->get(\Magento\Framework\Escaper::class);
+
+$orderShippingAddress = $block->getOrder()->getShippingAddress();
+if($orderShippingAddress){
+    $pudoId = (int)$orderShippingAddress->getInnoshipPudoId();
+    $courierId = (int)$orderShippingAddress->getInnoshipCourierId();
+    if($pudoId > 0){
+        $courierPudoName = $block->getPudoCourierName($pudoId);
+        if(!$courierPudoName){
+            $courierPudoName = "Locker-ul nu se regaseste in baza de date";
+            $pudoAddress = "-";
+        } else {
+            $pudoAddress = $block->getPudoAddress($pudoId);
+        }
+        ?>
+        <div style="background: #f1f1f1;margin-bottom: 10px;padding: 10px;">
+            <div><strong><h3><?= $escaper->escapeHtml(__('Livrare')) ?></h3></strong></div>
+            <div><strong><?= $escaper->escapeHtml(__('ID locatie:')) ?></strong> <?= (int)$pudoId ?></div>
+            <!-- SECURITY: Escape courier name and address to prevent XSS -->
+            <div><strong><?= $escaper->escapeHtml(__('Curier:')) ?></strong> <?= $escaper->escapeHtml($courierPudoName) ?></div>
+            <div><strong><?= $escaper->escapeHtml(__('Adresa locatie:')) ?></strong> <?= $escaper->escapeHtml($pudoAddress) ?></div>
+        </div>
+        <style>.box-order-shipping-address{display: none;}</style>
+        <?php
+    } else if($courierId > 0){
+        ?>
+        <div style="background: #f1f1f1;margin-bottom: 10px;padding: 10px;">
+            <div><strong><h3><?= $escaper->escapeHtml(__('Livrare')) ?></h3></strong></div>
+            <div><strong><?= $escaper->escapeHtml(__('ID curier:')) ?></strong> <?= (int)$courierId ?></div>
+            <!-- SECURITY: Escape courier name to prevent XSS -->
+            <div><strong><?= $escaper->escapeHtml(__('Curier:')) ?></strong> <?= $escaper->escapeHtml($block->getCourierName($courierId)) ?></div>
+        </div>
+        <?php
+    }
+}
+

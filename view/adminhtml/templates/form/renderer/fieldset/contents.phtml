@@ -1,0 +1,261 @@
+<?php $block->getBeforeHtml() ?>
+<?php $formKey = $block->getFormKey() . $block->getType(); ?>
+<?php $rowCount = 0; ?>
+<?php $hasData = (bool) count($block->getData('packages')); ?>
+<?php $dataList = $block->getData('packages') ?>
+<?php
+if(strtolower($block->getType()) === "parcel"){
+    $dataList = $block->getPackagesPred();
+    if(count($dataList) > 0){
+        $hasData = true;
+        $rowCount = 1;
+    }
+}
+?>
+
+<button class="js-btn-show-<?php echo $formKey; ?>" title="<?php echo __('Specify Package Dimensions'); ?>" type="button"
+    <?php echo false === $hasData ? '' : 'style="display:none;"'; ?>>
+    <span><?php echo __('Specify Package Dimensions'); ?></span>
+</button>
+
+<div class="design_theme_ua_regexp" id="grid_<?php echo $formKey; ?>">
+    <div class="admin__control-table-wrapper js-form-wrapper" style="display: <?php echo true === $hasData ? 'block' : 'none'; ?>">
+        <br>
+        <table class="admin__control-table js-package-contents">
+            <thead>
+            <tr>
+                <th><?php echo __('Width (cm)'); ?></th>
+                <th><?php echo __('Height (cm)'); ?></th>
+                <th><?php echo __('Length (cm)'); ?></th>
+                <th><?php echo __('Weight (kg)'); ?></th>
+                <th><?php echo __('Reference'); ?></th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php if ($hasData): ?>
+                <?php foreach ($dataList as $package): ?>
+                    <?php $rowKey = $formKey . $rowCount; ?>
+                    <?php
+                    if ((float)$package['weight'] < 1) {
+                        $package['weight'] = 1;
+                    }
+                    ?>
+                    <tr>
+                        <td>
+                            <input type="hidden" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][type]" value="2" required>
+                            <!-- SECURITY: Escape package dimensions to prevent XSS -->
+                            <input type="number" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][width]" value="<?php echo $block->escapeHtmlAttr($package['width']); ?>"
+                                   class="js-input-content-width input-text admin__control-text" min="1" step="0.1" required>
+                        </td>
+                        <td>
+                            <input type="number" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][height]" value="<?php echo $block->escapeHtmlAttr($package['height']); ?>"
+                                   class="js-input-content-height input-text admin__control-text" min="1" step="0.1" required>
+                        </td>
+                        <td>
+                            <input type="number" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][length]" value="<?php echo $block->escapeHtmlAttr($package['length']); ?>"
+                                   class="js-input-content-length input-text admin__control-text" min="1" step="0.1" required>
+                        </td>
+                        <td>
+                            <input type="number" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][weight]" value="<?php echo $block->escapeHtmlAttr($package['weight']); ?>"
+                                   class="js-input-content-weight input-text admin__control-text" min="1" step="0.1" required>
+                        </td>
+                        <td>
+                            <input type="text" name="packages[<?php echo $block->escapeHtmlAttr($rowKey); ?>][reference]" value="<?php echo $block->escapeHtmlAttr($package['reference']); ?>"
+                                   size="80" class="js-input-content-reference input-text admin__control-text" required>
+                        </td>
+                    </tr>
+                    <?php $rowCount++ ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+            </tbody>
+            <tfoot>
+            <tr>
+                <td colspan="5" style="text-align: right">
+                    [ <a href="#" class="js-btn-cancel-<?php echo $formKey; ?>">cancel</a> ]
+                </td>
+            </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <script>
+        require(['jquery'], function ($) {
+            (function () {
+                $('.js-input-number').attr('type', 'number');
+
+                let script<?php echo $block->getType(); ?> = {
+                    showButton: '.js-btn-show-<?php echo $formKey; ?>',
+                    cancelButton: '.js-btn-cancel-<?php echo $formKey; ?>',
+                    formWrapperElem: '.js-form-wrapper',
+                    formInputCountValue: '.js-input-count',
+                    formInputWeightValue: '.js-input-weight',
+                    formInputContentWeightValue: '.js-input-content-weight',
+                    packageContentsElem: '.js-package-contents',
+                    rowTemplate: '.js-row-template',
+                    mainContainer: 'label',
+                    rowsCount: 0,
+                    totalWeight: 0,
+                    template: '<tr>\n' +
+                        '    <td>\n' +
+                        '        <input type="hidden" name="packages[<?php echo $formKey; ?>][type]" value="<?php echo $block->getType(); ?>" required>\n' +
+                        '\n' +
+                        '        <input type="number" name="packages[<?php echo $formKey; ?>][width]" value=""\n' +
+                        '               class="js-input-content-width input-text admin__control-text" min="1" step="1" required>\n' +
+                        '    </td>\n' +
+                        '    <td>\n' +
+                        '        <input type="number" name="packages[<?php echo $formKey; ?>][height]" value=""\n' +
+                        '               class="js-input-content-height input-text admin__control-text" min="1" step="1" required>\n' +
+                        '    </td>\n' +
+                        '    <td>\n' +
+                        '        <input type="number" name="packages[<?php echo $formKey; ?>][length]" value=""\n' +
+                        '               class="js-input-content-length input-text admin__control-text" min="1" step="1" required>\n' +
+                        '    </td>\n' +
+                        '    <td>\n' +
+                        '        <input type="number" name="packages[<?php echo $formKey; ?>][weight]" value=""\n' +
+                        '               class="js-input-content-weight input-text admin__control-text" min="1" step="1" required>\n' +
+                        '    </td>\n' +
+                        '    <td>\n' +
+                        '        <input type="text" name="packages[<?php echo $formKey; ?>][reference]" value=""\n' +
+                        '               size="80" class="js-input-content-reference input-text admin__control-text" required>\n' +
+                        '    </td>\n' +
+                        '</tr>',
+
+                    /**
+                     * Bind actions (show form, hide form, etc)
+                     */
+                    bindActions: function () {
+                        let self = this;
+
+                        // Bind input form
+                        $('#grid_<?php echo $formKey; ?>').parent().parent().find(this.formInputCountValue).on('change keyup', function () {
+                            let inputValue = $(this).val();
+
+                            if (inputValue < 0) {
+                                $(this).val(0);
+                            }
+
+                            if ($(self.formWrapperElem).is(':visible')) {
+                                if (inputValue == 0 || inputValue == '') {
+                                    self.toggleWrapper($(self.showButton), 'hide');
+                                }
+
+                                self.setRowElements($(this).val());
+                            }
+                        });
+
+                        // Show package dimensions form
+                        $(this.showButton).on('click', function () {
+                            let rowsCount = $('#grid_<?php echo $formKey; ?>').parent().parent().find(self.formInputCountValue).val();
+
+                            if (rowsCount && rowsCount > 0) {
+                                self.toggleWrapper(this, 'show');
+                                self.setRowElements(rowsCount);
+                            }
+
+                            return false;
+                        });
+
+                        // Hide package dimensions form
+                        $(this.cancelButton).on('click', function () {
+                            self.rowsCount = 0;
+                            self.toggleWrapper(this, 'hide');
+
+                            // Remove rows
+                            $(this).parents(self.mainContainer).find(self.packageContentsElem + ' tbody tr').remove();
+
+                            return false;
+                        });
+                    },
+
+                    /**
+                     * Toggle form wrapper
+                     */
+                    toggleWrapper: function (elem, state) {
+                        let wrapperElement = $(elem).parents(this.mainContainer).find(this.formWrapperElem);
+                        let showButton = $(elem).parents(this.mainContainer).find(this.showButton);
+
+                        // Toggle wrapper element
+                        wrapperElement.toggle(state);
+
+                        // Toggle show button
+                        if (state == 'show') {
+                            showButton.hide();
+                        } else {
+                            showButton.show();
+                        }
+                    },
+
+                    /**
+                     * Get rows number
+                     */
+                    setRowsCount: function () {
+                        this.rowsCount = $('#grid_<?php echo $formKey; ?>').parent().parent().find(this.formInputCountValue).val();
+                    },
+
+                    /**
+                     * Set total wight
+                     */
+                    setTotalWeight: function () {
+                        let self = this;
+
+                        $(this.formInputContentWeightValue).on('change', function () {
+                            // Reset old value
+                            $(self.formInputWeightValue).val(1);
+                            self.totalWeight = 0;
+
+                            $(self.formInputContentWeightValue).each(function (index, value) {
+                                let weightValue = $(value).val();
+
+                                if (weightValue > 0) {
+                                    self.totalWeight = self.totalWeight + parseInt(weightValue);
+                                }
+                            });
+
+                            $(self.formInputWeightValue).val(self.totalWeight);
+                        });
+                    },
+
+                    /**
+                     * Add rows to wrapper table
+                     */
+                    setRowElements: function (rows) {
+                        let i;
+                        let newRowsCount = rows - this.rowsCount;
+
+                        // Remove rows
+                        if (newRowsCount < 0) {
+                            $('#grid_<?php echo $formKey; ?>').find(this.packageContentsElem + ' tbody tr').slice(newRowsCount).remove('tr');
+                        } else {
+                            for (i = 0; i < newRowsCount; i++) {
+                                $('#grid_<?php echo $formKey; ?>').find(this.packageContentsElem + ' tbody')
+                                    .append(this.template.replace(/<?php echo $formKey; ?>/g, this.randomKey()));
+                            }
+                        }
+
+                        this.rowsCount = rows;
+
+                        this.setTotalWeight();
+                    },
+
+                    /**
+                     * Random key generator
+                     */
+                    randomKey: function() {
+                        return Math.random().toString(36).substring(8);
+                    },
+
+                    /**
+                     * Init method
+                     */
+                    init: function () {
+                        this.setRowsCount();
+                        this.bindActions();
+                    },
+                };
+
+                // Init
+                $(script<?php echo $block->getType(); ?>.init());
+            })();
+        });
+    </script>
+</div>

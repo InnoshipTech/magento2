@@ -1,0 +1,13 @@
+<?php
+/** @var \Magento\Framework\View\Element\Template $block */
+/** @var \Magento\Framework\Escaper $escaper */
+/** @var \Magento\Customer\Model\Customer $customer */
+$customer = $block->getCustomer();
+$escaper = $block->getData('escaper') ?: \Magento\Framework\App\ObjectManager::getInstance()->get(\Magento\Framework\Escaper::class);
+?>
+
+<div class="favorite-locker">
+    <h2><?= $escaper->escapeHtml(__('Favorite Locker Information')) ?></h2>
+    <!-- SECURITY: Escape customer data to prevent XSS -->
+    <p><?= $escaper->escapeHtml($customer->getData('favorite_locker_name') ?: __('None')) ?></p>
+</div>

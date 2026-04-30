@@ -1,0 +1,219 @@
+.innoship-mapsection{
+    position: fixed;
+    top: 10vh;
+    left: 10vw;
+    width: calc(80vw);
+    height: calc(80vh);
+    background: #fff;
+    z-index: 9999;
+    border: 1px solid #eaeaea;
+    display: none;
+}
+#mapview{
+    width: calc(100% - 300px);
+    height: 100%;
+    float: right;
+}
+#innopudocounty{
+    width: 260px;
+    display: none;
+    margin-top: 10px;
+}
+#innopudocity{
+    width: 260px;
+    display: none;
+    margin-top: 10px
+}
+.innomapliv{
+    width: 100%;
+    display: inline-block;
+    margin-top: 20px;
+}
+.searchmap{
+    padding: 20px;
+}
+.innoshippudoclose{
+    position: absolute;
+    top: -11px;
+    right: -13px;
+    font-size: 18px;
+    border: 1px solid #ccc;
+    padding: 5px 10px;
+    border-radius: 50%;
+    line-height: 18px;
+    font-weight: 500;
+    background: #fff;
+    cursor: pointer;
+    z-index: 900;
+}
+.innopudoheader{
+    padding: 20px 0 0 20px;
+    position: relative;
+}
+
+#innoshipshowmapb{
+    background: #dbe2da;
+    padding: 5px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 100;
+    position: relative;
+}
+#innoshipcargusalegeconf,
+#innoshipsalveazafavorit{
+    background: #dbe2da;
+    padding: 5px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    width: 100%;
+    margin-top: 10px;
+}
+.innoship-mapsection-layer{
+    position: fixed;
+    top: 0px;
+    left: 0px;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.3);
+    display: none;
+    z-index: 9999;
+}
+.pudo-success{
+    display: none;
+}
+#innopudocourierlist{
+    margin-top: 10px;
+    display: none;
+}
+#innopudocourierlist .courier-list-row{
+    padding: 0px 0px 5px 0;
+}
+.innopudo-section-left{
+    width: 300px;
+    float: left;
+    overflow: auto;
+    height: 100%;
+    position: relative;
+}
+.searchpudoresults{
+    position: absolute;
+    background: #ffff;
+    width: calc(100% - 2px);
+    max-height: 177px;
+    height: auto;
+    overflow: auto;
+    border-left: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+    z-index: 99;
+}
+.searchpudo{
+    width: 260px;
+    display: none;
+    margin-top: 10px;
+    position: relative;
+}
+#searchpudovalue{
+    width: 100%;
+    display: inline-block;
+}
+.pudosearchitemfound{
+    cursor: pointer;
+    display: inline-block;
+    width: calc(100% - 20px);
+    border-bottom: 1px dotted #ccc;
+    padding: 5px;
+}
+.courierList-innoship ul li{
+    list-style: none;
+}
+.innoship-courier-iditem,
+.innoship-courier-iditem label,
+.innoship-courier-iditem input{
+    cursor: pointer;
+}
+.fake-click {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 99 !important;
+}
+#checkout-shipping-method-load tr,
+#co-shipping-method-form,
+.amcheckout-shipping-methods{
+    position: relative;
+}
+#locatiamea{
+    width: auto;
+    height: 30px;
+    position: absolute;
+    right: 10px;
+    top: 15px;
+    cursor: pointer;
+}
+#locatiamea svg{
+    height: 30px;
+}
+.alege-locker-favorit-click{
+    background: #dbe2da;
+    padding: 5px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    width: 90%;
+    margin-top: 5px;
+}
+.pudo-success .col-pudo-message{
+    width: 100% !important;
+}
+.loader-innoship {
+    width: 40px;
+    height: 20px;
+    border-radius: 200px 200px 0 0;
+    -webkit-mask: repeating-radial-gradient(farthest-side at bottom ,#0000 0,#000 1px 12%,#0000 calc(12% + 1px) 20%);
+    background:
+            radial-gradient(farthest-side at bottom,#514b82 0 95%,#0000 0) bottom/0% 0% no-repeat
+            #ddd;
+    animation: l10 2s infinite steps(6);
+}
+@keyframes l10 {
+    100% {background-size:120% 120%}
+}
+@media only screen and (max-width: 768px){
+    .innoship-mapsection{
+        top: 15px;
+        left: 15px;
+        width: calc(100vw - 30px);
+        height: 85%;
+    }
+    #innopudocity{
+        width: 48%;
+        margin-left: 10px;
+    }
+    #innopudocounty{
+        width: 48%;
+    }
+    .innomapliv{
+        width: 100%;
+        padding-left: 0px;
+        margin-top: 20px;
+    }
+    .innopudo-section-left{
+        width: 100%;
+        height: 350px;
+        overflow: auto;
+    }
+    #mapview{
+        width: calc(100%);
+        height: calc(100% - 350px);
+    }
+    .innoship-mapsection{
+        height: calc(100vh - 30px);
+    }
+    .searchpudo{
+        width: 100%;
+    }
+}

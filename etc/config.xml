@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <carriers>
+            <innoship>
+                <active>0</active>
+                <debug>0</debug>
+                <title>InnoShip</title>
+                <name>InnoShip</name>
+                <allowed_methods>1</allowed_methods>
+                <gateway_url>https://api.innoship.io</gateway_url>
+                <api_version>1.0</api_version>
+                <handling_fee>0</handling_fee>
+                <model>InnoShip\InnoShip\Model\Carrier</model>
+                <sallowspecific>0</sallowspecific>
+                <specificcountry>RO</specificcountry>
+                <showmethod>0</showmethod>
+                <specificerrmsg>This shipping method is currently unavailable. If you would like to ship using this shipping method, please contact us.</specificerrmsg>
+            </innoship>
+            <innoshipcargusgo>
+                <active>0</active>
+                <debug>0</debug>
+                <title>Innoship Locker</title>
+                <name>InnoShip Locker</name>
+                <allowed_methods>1</allowed_methods>
+                <handling_fee>0</handling_fee>
+                <model>InnoShip\InnoShip\Model\Carriergo</model>
+                <sallowspecific>0</sallowspecific>
+                <specificcountry>RO</specificcountry>
+                <showmethod>0</showmethod>
+                <specificerrmsg>This shipping method is currently unavailable. If you would like to ship using this shipping method, please contact us.</specificerrmsg>
+            </innoshipcargusgo>
+        </carriers>
+    </default>
+</config>

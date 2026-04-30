@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="sales_shipment_track">
+        <column xsi:type="text" name="innoship_data" nullable="true" comment="InnoShip response data (create AWB) (JSON)"/>
+    </table>
+    <table name="innoship_pudo" resource="default" engine="innodb" comment="Innoship pudo">
+        <column xsi:type="int" name="id" unsigned="true" nullable="false" identity="true" comment="ID"/>
+        <column xsi:type="int" name="pudo_id" unsigned="true" nullable="false" comment="Pudo ID"/>
+        <column xsi:type="varchar" name="name" nullable="false" length="255" comment="Name"/>
+        <column xsi:type="int" name="fixedLocationTypeId" unsigned="true" nullable="false" comment="fixedLocationTypeId"/>
+        <column xsi:type="int" name="serviceId" unsigned="true" nullable="false" comment="serviceId"/>
+        <column xsi:type="int" name="courierId" unsigned="true" nullable="false" comment="courierId"/>
+        <column xsi:type="int" name="localityId" nullable="false" comment="Location ID"/>
+        <column xsi:type="varchar" name="localityName" nullable="false" length="255" comment="localityName"/>
+        <column xsi:type="varchar" name="countyName" nullable="false" length="255" comment="countyName"/>
+        <column xsi:type="varchar" name="countryCode" nullable="false" length="255" comment="countryCode"/>
+        <column xsi:type="varchar" name="addressText" nullable="true" length="255" comment="Address"/>
+        <column xsi:type="varchar" name="postalCode" nullable="true" length="100" comment="Postal Code"/>
+        <column xsi:type="decimal" name="longitude" scale="6" precision="9" unsigned="false" nullable="false" comment="Longitude"/>
+        <column xsi:type="decimal" name="latitude" scale="6" precision="9" unsigned="false" nullable="false" comment="Latitude"/>
+        <column xsi:type="int" name="isActive" unsigned="true" nullable="false" comment="isActive"/>
+        <column xsi:type="varchar" name="email" nullable="true" length="255" comment="email"/>
+        <column xsi:type="varchar" name="phone" nullable="true" length="255" comment="phone"/>
+        <column xsi:type="varchar" name="supportedPaymentType" length="255" nullable="true" comment="supportedPaymentType"/>
+        <column xsi:type="varchar" name="open_hours_mo_start" nullable="true" length="50" comment="Open Hours Monday Start"/>
+        <column xsi:type="varchar" name="open_hours_mo_end" nullable="true" length="50" comment="Open Hours Monday End"/>
+        <column xsi:type="varchar" name="open_hours_tu_start" nullable="true" length="50" comment="Open Hours Tuesday Start"/>
+        <column xsi:type="varchar" name="open_hours_tu_end" nullable="true" length="50" comment="Open Hours Tuesday End"/>
+        <column xsi:type="varchar" name="open_hours_we_start" nullable="true" length="50" comment="Open Hours Wednesday Start"/>
+        <column xsi:type="varchar" name="open_hours_we_end" nullable="true" length="50" comment="Open Hours Wednesday End"/>
+        <column xsi:type="varchar" name="open_hours_th_start" nullable="true" length="50" comment="Open Hours Thursday Start"/>
+        <column xsi:type="varchar" name="open_hours_th_end" nullable="true" length="50" comment="Open Hours Thursday End"/>
+        <column xsi:type="varchar" name="open_hours_fr_start" nullable="true" length="50" comment="Open Hours Friday Start"/>
+        <column xsi:type="varchar" name="open_hours_fr_end" nullable="true" length="50" comment="Open Hours Friday End"/>
+        <column xsi:type="varchar" name="open_hours_sa_start" nullable="true" length="50" comment="Open Hours Saturday Start"/>
+        <column xsi:type="varchar" name="open_hours_sa_end" nullable="true" length="50" comment="Open Hours Saturday End"/>
+        <column xsi:type="varchar" name="open_hours_su_start" nullable="true" length="50" comment="Open Hours Sunday Start"/>
+        <column xsi:type="varchar" name="open_hours_su_end" nullable="true" length="50" comment="Open Hours Sunday End"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="INNOSHIP_PUDO_PUDO_ID">
+            <column name="pudo_id"/>
+        </constraint>
+        <index referenceId="INNOSHIP_PUDO_COUNTY_CODE" indexType="btree">
+            <column name="countryCode"/>
+        </index>
+        <index referenceId="INNOSHIP_PUDO_SERVICEID" indexType="btree">
+            <column name="serviceId"/>
+        </index>
+        <index referenceId="INNOSHIP_PUDO_LOCALITY_ID" indexType="btree">
+            <column name="localityId"/>
+        </index>
+        <index referenceId="INNOSHIP_PUDO_COURIER_ID" indexType="btree">
+            <column name="courierId"/>
+        </index>
+    </table>
+
+    <table name="innoship_courierlist" resource="default" engine="innodb" comment="Innoship pudo">
+        <column xsi:type="int" name="id" unsigned="true" nullable="false" identity="true" comment="ID"/>
+        <column xsi:type="int" name="courierId" unsigned="true" nullable="false" comment="Courier ID"/>
+        <column xsi:type="varchar" name="courierName" nullable="false" length="255" comment="Courier Name"/>
+        <column xsi:type="varchar" name="country" nullable="true" length="10" comment="Country Code"/>
+
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="INNOSHIP_COURIERLIST_COURIER_COUNTRY">
+            <column name="courierId"/>
+            <column name="country"/>
+        </constraint>
+        <index referenceId="INNOSHIP_COURIERLIST_COUNTRY" indexType="btree">
+            <column name="country"/>
+        </index>
+    </table>
+
+    <table name="innoship_citys" resource="default" engine="innodb" comment="Innoship City List">
+        <column xsi:type="int" name="id" unsigned="true" nullable="false" identity="true" comment="ID"/>
+        <column xsi:type="varchar" name="country" nullable="false" length="255" comment="country"/>
+        <column xsi:type="int" name="regioId" unsigned="true" nullable="false" comment="regioId"/>
+        <column xsi:type="varchar" name="regioCode" nullable="false" length="255" comment="regioCode"/>
+        <column xsi:type="varchar" name="localitate" nullable="false" length="255" comment="localitate"/>
+        <column xsi:type="varchar" name="codPostal" nullable="false" length="255" comment="codPostal"/>
+
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="INNOSHIP_REGIO_ID" indexType="btree">
+            <column name="regioId"/>
+        </index>
+        <index referenceId="INNOSHIP_REGIO_CODE" indexType="btree">
+            <column name="regioCode"/>
+        </index>
+        <index referenceId="INNOSHIP_COUNTRY_CODE" indexType="btree">
+            <column name="country"/>
+        </index>
+    </table>
+
+    <table name="quote_address">
+        <column xsi:type="int" name="innoship_pudo_id" nullable="true" comment="Innoship Pudo Id"/>
+        <column xsi:type="int" name="innoship_courier_id" nullable="true" comment="Innoship Courier Id"/>
+        <column xsi:type="decimal" name="innoship_shipping_price" scale="4" precision="20" nullable="true" comment="Innoship Shipping Price"/>
+    </table>
+    <table name="sales_order_address">
+        <column xsi:type="int" name="innoship_pudo_id" nullable="true" comment="Innoship Pudo Id"/>
+        <column xsi:type="int" name="innoship_courier_id" nullable="true" comment="Innoship Courier Id"/>
+        <column xsi:type="decimal" name="innoship_shipping_price" scale="4" precision="20" nullable="true" comment="Innoship Shipping Price"/>
+    </table>
+</schema>

@@ -1,0 +1,37 @@
+<?php
+/** @var \Magento\Framework\View\Element\Template $block */
+$pudoId = 0;
+$courierId = 0;
+$orderShippingAddress = $block->getOrder()->getShippingAddress();
+if($orderShippingAddress){
+    $pudoId = (int)$orderShippingAddress->getInnoshipPudoId();
+    $courierId = (int)$orderShippingAddress->getInnoshipCourierId();
+}
+
+if($pudoId > 0){
+    $courierPudoName = $block->getPudoCourierName($pudoId);
+    if(!$courierPudoName){
+        $courierPudoName = "Locker-ul nu se regaseste in baza de date";
+        $pudoAddress = "-";
+    } else {
+        $pudoAddress = $block->getPudoAddress($pudoId);
+    }
+    ?>
+    <div style="background: #f1f1f1;margin-bottom: 10px;padding: 10px;">
+        <div><strong><h3><?= $block->escapeHtml(__('Livrare Innoship EasyBox')) ?></h3></strong></div>
+        <div><strong><?= $block->escapeHtml(__('ID locatie:')) ?></strong> <?= (int)$pudoId ?></div>
+        <!-- SECURITY: Escape courier name and address to prevent XSS -->
+        <div><strong><?= $block->escapeHtml(__('Curier:')) ?></strong> <?= $block->escapeHtml($courierPudoName) ?></div>
+        <div><strong><?= $block->escapeHtml(__('Adresa locatie:')) ?></strong> <?= $block->escapeHtml($pudoAddress) ?></div>
+    </div>
+    <?php
+} else if($courierId > 0){
+    ?>
+    <div style="background: #f1f1f1;margin-bottom: 10px;padding: 10px;">
+        <div><strong><h3><?= $block->escapeHtml(__('Livrare Innoship')) ?></h3></strong></div>
+        <div><strong><?= $block->escapeHtml(__('ID curier:')) ?></strong> <?= (int)$courierId ?></div>
+        <!-- SECURITY: Escape courier name to prevent XSS -->
+        <div><strong><?= $block->escapeHtml(__('Curier:')) ?></strong> <?= $block->escapeHtml($block->getCourierName($courierId)) ?></div>
+    </div>
+    <?php
+}

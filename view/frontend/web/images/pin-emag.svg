@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="47px" height="59px" viewBox="0 0 47 59" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>circle-easybox</title>
+    <defs>
+        <ellipse id="path-1" cx="16.6388671" cy="16.64" rx="16.6388671" ry="16.64"></ellipse>
+        <filter x="-21.0%" y="-15.0%" width="142.1%" height="142.1%" filterUnits="objectBoundingBox" id="filter-3">
+            <feOffset dx="0" dy="2" in="SourceAlpha" result="shadowOffsetOuter1"></feOffset>
+            <feGaussianBlur stdDeviation="2" in="shadowOffsetOuter1" result="shadowBlurOuter1"></feGaussianBlur>
+            <feComposite in="shadowBlurOuter1" in2="SourceAlpha" operator="out" result="shadowBlurOuter1"></feComposite>
+            <feColorMatrix values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.5 0" type="matrix" in="shadowBlurOuter1"></feColorMatrix>
+        </filter>
+    </defs>
+    <g id="Checkout---Rework---Desktop" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="[CO]-Pickup-Point-Icons" transform="translate(-368.000000, -940.000000)">
+            <g id="actual-size" transform="translate(24.000000, 697.000000)">
+                <g id="circle-2x" transform="translate(5.000000, 243.000000)">
+                    <g id="circle-easybox" transform="translate(339.000000, 0.000000)">
+                        <rect id="Rectangle" x="0" y="0" width="47" height="56"></rect>
+                        <g id="Group" transform="translate(7.000000, 18.000000)">
+                            <g id="Group-2" transform="translate(0.273810, 0.273810)">
+                                <mask id="mask-2" fill="white">
+                                    <use xlink:href="#path-1"></use>
+                                </mask>
+                                <g id="Mask">
+                                    <use fill="black" fill-opacity="1" filter="url(#filter-3)" xlink:href="#path-1"></use>
+                                    <ellipse stroke="#FFFFFF" stroke-width="3" stroke-linejoin="square" fill="#F50900" fill-rule="evenodd" cx="16.6388671" cy="16.64" rx="15.1388671" ry="15.14"></ellipse>
+                                </g>
+                                <g mask="url(#mask-2)" fill="#FFFFFF">
+                                    <g transform="translate(5.500000, 5.500000)">
+                                        <polygon id="Path-2" points="0 5.23809524 0 18.3089977 10.4761905 22.2619048 10.4761905 9.09152817 5.90521677 7.34441454 5.90521677 10.4488178 3.44676033 9.78454867 3.44676033 6.45200129"></polygon>
+                                        <polygon id="Path-3" points="12.4404762 9.30996405 12.4404762 22.2619048 22.2619048 18.3089977 22.2619048 5.23809524"></polygon>
+                                        <polygon id="Path-4" points="7.21466549 6.25420269 11.4966799 7.89285714 21 3.90082839 16.6315144 2.43094109"></polygon>
+                                        <polygon id="Path-4-Copy-2" points="0.226190476 4.04945207 4.50820488 5.68810653 14.011525 1.69607778 9.64303939 0.226190476"></polygon>
+                                    </g>
+                                </g>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

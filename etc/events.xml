@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_shipment_track_delete_after">
+        <observer name="sales_order_shipment_track_delete_before" instance="InnoShip\InnoShip\Observer\DeleteAwb" />
+    </event>
+    <event name="sales_order_save_after">
+        <observer name="save_data" instance="InnoShip\InnoShip\Observer\AddPudoFieldValue"  />
+    </event>
+</config>

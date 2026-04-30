@@ -1,0 +1,152 @@
+# Changelog Innoship
+
+## [1.3.8]
+    - Fix compatibility with Amasty_Checkout => billing city display none for multiple payment methods
+
+## [1.3.7]
+    - Fix compatibility with Amasty_Checkout => automatically refresh payment methods based on shipping method selection
+
+## [1.3.6]
+    - Fix compatibility with Amasty_Checkout
+    - Fix return on bin/magento innoship:dataimport
+    - Fix selecting city and region based in map interface
+
+## [1.3.5]
+    - Fix compatibility with Amasty_Checkout
+
+## [1.3.4]
+    - Compatibility with PHP 8.4
+
+## [1.3.3]
+    - Fix import address without ","
+    - Important
+        - After install run bin/magento innoship:dataimport
+
+## [1.3.2]
+    - Add city selection to customer account address book
+
+## [1.3.1]
+    - Fix addresses from InnoShip API
+    - Fix region error in checkout for logged in users
+
+## [1.3]
+    - Enable translations on map via JS
+    - Country Specific Fees
+    - Automatic determine serviceID for InnoShip
+    - New console command innoship:regioimport
+        - Example: bin/magento innoship:regioimport PL
+    - Fix when loker is still present in order and order was not send with locker. (only for new customer with Amasty Shipping Restrictions)
+    - Automatic pricing when "Show Courier List" is enable
+        - It is based on "Multiplicator Pret" and "Automatic Price" => "Yes"
+    - Locker map => drag / zoom => getting all lockers for a 5km radious
+    - Security improvements
+    - Performance improvements
+    - Important
+        - After install run bin/magento innoship:dataimport
+        - After install run bin/magento innoship:externalid
+
+
+## [1.2]
+    - Fixes for PHP 8.2
+    - Fixes for Magento 2.4.7
+    - Fix min 1 KG when creating AWB
+    - Fix display information for Locker not in the DB in Admin
+    - Fix display information for Locker not in the DB in Frontend Client account
+    - Fix when creating AWB from Admin, if locker does not exist in DB, it will not allow AWB generation
+    - Fix logged in customer shipping address phone bug from Magento 2.4.7
+    - Fix shipping cost calculation for functionality Create Admin Order
+    - Fix get locker list when courier is not in Magento database
+    - Add patch to rename "Satu-Mare" to "Satu Mare" in Magento database
+    - AWB label print will generate a PDF file on the fly and download it. (Please delete folder /pub/media/innoship/)
+    - Feature: Add option to use GPS location to idenfity lockers around me
+    - Feature: Favorite Locker functionality for logged in customers
+
+## [1.1.11]
+
+    - Code quality improvement
+    - Fix "My billing and shipping address are the same" checkbox
+    - Fix hide billing address on locker selection
+    - Clean locker information on checkout refresh
+
+## [1.1.10]
+
+    - Code quality improvement
+
+## [1.1.9]
+
+    - Add zoom on selected easybox
+    - Update SQL statements
+
+## [1.1.8]
+
+    - Fix isEasybox.js for Virtual products
+    - Fix Admin Order display for Virtual products
+
+## [1.1.7]
+
+    - Order locality by locality name
+
+## [1.1.6]
+
+    - Update compatibility with PHP 8.2
+    - Improvements on Locker selection screen
+
+## [1.1.5]
+
+    - International courier locker
+    - Improve performance on locker import
+    - Improve performance on locality import
+    - Improve compatibility with Magento 2.4.X
+    - Improve frontend locker display
+    - Create command to get ExternalID after add API key to settings => bin/magento innoship:externalid
+    - Change EasyBox to Locker
+    - Fix Same as shipping checkbox
+    - Fix duplicate shipment created
+    - Fix frontend display on Amasty_Checkout
+    - Fix locality import for IT
+    - Fix Generate InnoShip AWB screen, Parcel Count information on Magento 2.4.X
+    - Fix setup compatibility with MySQL 8
+    - Fix Parcel Count on Generate AWB Screen
+
+## [1.1.4]
+
+    - Improve display for cache "Alege" for easybox
+    - Improve compatibility with Amasty Checkout => add amasty overwrite into current template folder https://stormers.ro/Amasty_CheckoutCore.zip
+    - Add extra validation on Easybox shipping method
+    - Fix weight la nivel de AWB
+
+## [1.1.3]
+
+    - Fix invalid rates from Innoship
+    - Fix duplicate pudo in DB
+        *** If you have problems with duplicate pudo records in the DB, remove tables innoship_pudo and innoship_courierlist and run on terminal:
+        *** php bin/magent setup:upgrade && php bin/magento innoship:dataimport
+    - Fix import easybox for "'"
+    - Fixes on checkout.js for Easybox functionality
+    - Update city import with postal codes
+    - Add "+" to phone number save AWB
+    - Update easybox map for confirm
+    - Add discount amount per items when calculating free shipping
+
+## [1.1.2]
+
+    - Fix AWB screen weight display
+    - AWB screen add default 1 for width, height, length if no values are filled in
+    - Fix create AWB screen from shipment page "An ID is needed"
+    - Add user rights for AWB
+    - Fix "Print Innoship AWB's" getLabelformat
+    - Add security measure when region is not available in QUOTE
+
+## [1.1.1] - 28.05.2023
+
+    - Update leaflet.css
+    - Update leaflet.js
+
+## [1.1.0] - 12.05.2023
+
+    - Add package sizes mapping attributes
+    - EasyBox validation based on sizes
+    - Automatic price from InnoShip
+    - Automatic fill in sizes in AWB info admin window
+    - Update CRON functionality
+    - Other BUG fixes for checkout

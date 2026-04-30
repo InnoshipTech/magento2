@@ -1,0 +1,332 @@
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="carriers">
+            <group id="innoship" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>InnoShip</label>
+
+                <field id="active" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Enabled for Checkout</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="name" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Method Name</label>
+                </field>
+
+                <field id="title" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Title</label>
+                </field>
+
+                <field id="allowed_methods" translate="label" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Allowed Methods</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\Method</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+                <field id="card_payment" translate="label" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Cash on delivery Exception Methods</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\ExceptionMethod</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+
+                <field id="gateway_url" translate="label" type="text" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Gateway URL</label>
+                    <backend_model>InnoShip\InnoShip\Model\Config\Backend\GatewayUrl</backend_model>
+                </field>
+
+                <field id="api_key" translate="label" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                </field>
+
+                <field id="api_version" translate="label" type="text" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>API Version</label>
+                    <backend_model>InnoShip\InnoShip\Model\Config\Backend\ApiVersion</backend_model>
+                </field>
+
+                <field id="showcourierlist" translate="label" type="select" sortOrder="210" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Show Courier List</label>
+                    <frontend_class>shipping-show-courier-list</frontend_class>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="external_id_send" translate="label" type="text" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>ExternalID</label>
+                </field>
+
+                <field id="default_order_content" translate="label" type="text" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Default Order Content</label>
+                </field>
+
+                <field id="saturday_delivery" translate="label" type="select" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Saturday Delivery</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="handling_type" translate="label" type="select" sortOrder="110" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Calculate Handling Fee</label>
+                    <source_model>Magento\Shipping\Model\Source\HandlingType</source_model>
+                </field>
+
+                <field id="handling_fee" translate="label" type="text" sortOrder="120" showInDefault="1" showInWebsite="1" showInStore="0" >
+                    <label>Handling Fee</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+
+                <field id="handling_fee_external" translate="label" type="text" sortOrder="90" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Handling Fee External Countries (Deprecated - Use Country Specific Fees below)</label>
+                    <comment><![CDATA[<strong style="color: #f00;">This field is deprecated. Please use "Country Specific Fees" below.</strong>]]></comment>
+                </field>
+
+                <field id="country_fees" translate="label comment" sortOrder="91" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Country Specific Fees</label>
+                    <comment>Set handling fees for specific countries. Select country and enter fee amount.</comment>
+                    <frontend_model>InnoShip\InnoShip\Block\Adminhtml\Form\Field\CountryFees</frontend_model>
+                    <backend_model>InnoShip\InnoShip\Model\Config\Backend\CountryFees</backend_model>
+                </field>
+
+                <field id="free_shipping_enable" translate="label" type="select" sortOrder="130" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Enable Free Shipping</label>
+                    <source_model>Magento\Config\Model\Config\Source\Enabledisable</source_model>
+                </field>
+
+                <field id="free_shipping_subtotal" translate="label" type="text" sortOrder="140" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Minimum Order Amount for Free Shipping</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                    <depends>
+                        <field id="free_shipping_enable">1</field>
+                    </depends>
+                </field>
+
+                <field id="payment" translate="label" type="select" sortOrder="150" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Transport Payment</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\Payment</source_model>
+                </field>
+
+                <field id="repayment" translate="label" type="select" sortOrder="160" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Cash on delivery repayment</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\RePayment</source_model>
+                </field>
+
+                <field id="open_package" translate="label" type="select" sortOrder="170" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Open Package</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="automatic_price" translate="label" type="select" sortOrder="170" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Automatic Price</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="lungime" translate="label" type="text" sortOrder="171" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Lungime</label>
+                    <depends>
+                        <field id="automatic_price">1</field>
+                    </depends>
+                </field>
+
+                <field id="latime" translate="label" type="text" sortOrder="172" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Latime</label>
+                    <depends>
+                        <field id="automatic_price">1</field>
+                    </depends>
+                </field>
+
+                <field id="inaltime" translate="label" type="text" sortOrder="173" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Inaltime</label>
+                    <depends>
+                        <field id="automatic_price">1</field>
+                    </depends>
+                </field>
+
+                <field id="multiplicator" translate="label" type="text" sortOrder="174" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Multiplicator Pret</label>
+                    <depends>
+                        <field id="automatic_price">1</field>
+                    </depends>
+                </field>
+
+                <field id="insurance_included" translate="label" type="select" sortOrder="180" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Insurance Included</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="sallowspecific" translate="label" type="select" sortOrder="190" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Ship to Applicable Countries</label>
+                    <frontend_class>shipping-applicable-country</frontend_class>
+                    <source_model>Magento\Shipping\Model\Config\Source\Allspecificcountries</source_model>
+                </field>
+
+                <field id="specificcountry" translate="label" type="multiselect" sortOrder="200" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Ship to Specific Countries</label>
+                    <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+
+                <field id="showmethod" translate="label" type="select" sortOrder="210" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Show Method if Not Applicable</label>
+                    <frontend_class>shipping-skip-hide</frontend_class>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="labelformat" translate="label" type="select" sortOrder="220" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Label format</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\Format</source_model>
+                </field>
+
+                <field id="specificerrmsg" translate="label" type="textarea" sortOrder="230" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Displayed Error Message</label>
+                </field>
+
+                <field id="debug" translate="label" type="select" sortOrder="240" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Debug</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="sort_order" translate="label" type="text" sortOrder="250" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sort Order</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+            </group>
+            <group id="innoshipcargusgo" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>InnoShip Locker</label>
+
+                <field id="active" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Enabled for Checkout</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="allowed_methods" translate="label" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Allowed Methods</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\Methodgo</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+                <field id="name" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Method Name</label>
+                </field>
+
+                <field id="title" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Title</label>
+                </field>
+
+                <field id="saturday_delivery" translate="label" type="select" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Saturday Delivery</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="handling_type" translate="label" type="select" sortOrder="110" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Calculate Handling Fee</label>
+                    <source_model>Magento\Shipping\Model\Source\HandlingType</source_model>
+                </field>
+
+                <field id="handling_fee" translate="label" type="text" sortOrder="120" showInDefault="1" showInWebsite="1" showInStore="0" >
+                    <label>Handling Fee</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+
+                <field id="country_pudo_fees" translate="label comment" sortOrder="121" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Country Specific PUDO Fees</label>
+                    <comment>Set handling fees for specific countries for PUDO/Locker delivery. Select country and enter fee amount.</comment>
+                    <frontend_model>InnoShip\InnoShip\Block\Adminhtml\Form\Field\CountryPudoFees</frontend_model>
+                    <backend_model>InnoShip\InnoShip\Model\Config\Backend\CountryFees</backend_model>
+                </field>
+
+                <field id="free_shipping_enable" translate="label" type="select" sortOrder="130" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Enable Free Shipping</label>
+                    <source_model>Magento\Config\Model\Config\Source\Enabledisable</source_model>
+                </field>
+
+                <field id="free_shipping_subtotal" translate="label" type="text" sortOrder="140" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Minimum Order Amount for Free Shipping</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                    <depends>
+                        <field id="free_shipping_enable">1</field>
+                    </depends>
+                </field>
+
+                <field id="check_if_available" translate="label" type="select" sortOrder="150" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Check if available</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="lungime" translate="label" type="text" sortOrder="151" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Lungime</label>
+                    <depends>
+                        <field id="check_if_available">1</field>
+                    </depends>
+                </field>
+
+                <field id="latime" translate="label" type="text" sortOrder="152" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Latime</label>
+                    <depends>
+                        <field id="check_if_available">1</field>
+                    </depends>
+                </field>
+
+                <field id="inaltime" translate="label" type="text" sortOrder="153" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Atribut Inaltime</label>
+                    <depends>
+                        <field id="check_if_available">1</field>
+                    </depends>
+                </field>
+
+                <field id="payment" translate="label" type="select" sortOrder="160" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Transport Payment</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\Payment</source_model>
+                </field>
+
+                <field id="repayment" translate="label" type="select" sortOrder="170" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Cash on delivery repayment</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\RePayment</source_model>
+                </field>
+
+                <field id="open_package" translate="label" type="select" sortOrder="180" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Open Package</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="insurance_included" translate="label" type="select" sortOrder="190" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Insurance Included</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="sallowspecific" translate="label" type="select" sortOrder="200" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Ship to Applicable Countries</label>
+                    <frontend_class>shipping-applicable-country</frontend_class>
+                    <source_model>Magento\Shipping\Model\Config\Source\Allspecificcountries</source_model>
+                </field>
+
+                <field id="specificcountry" translate="label" type="multiselect" sortOrder="210" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Ship to Specific Countries</label>
+                    <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+
+                <field id="innoship_cargus_go_payment_restriction" translate="label" type="multiselect" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Allow Payment Methods</label>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\PaymentRestrictions</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+
+                <field id="showmethod" translate="label" type="select" sortOrder="210" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Show Method if Not Applicable</label>
+                    <frontend_class>shipping-skip-hide</frontend_class>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="specificerrmsg" translate="label" type="textarea" sortOrder="220" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>Displayed Error Message</label>
+                </field>
+
+                <field id="debug" translate="label" type="select" sortOrder="230" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Debug</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="sort_order" translate="label" type="text" sortOrder="240" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sort Order</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+            </group>
+            <resource>InnoShip_InnoShop::innoship_configuration</resource>
+        </section>
+    </system>
+</config>

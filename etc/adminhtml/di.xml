@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Shipping\Block\Adminhtml\View">
+        <plugin name="innoship_innoship_adminhtml_shipping_view_add_button" type="InnoShip\InnoShip\Plugin\Shipping\Block\Adminhtml\View" sortOrder="10"/>
+    </type>
+    <type name="Magento\Sales\Block\Adminhtml\Order\View">
+        <plugin name="innoship_innoship_adminhtml_order_view_add_button" type="InnoShip\InnoShip\Plugin\Order\Block\Adminhtml\View" sortOrder="10"/>
+    </type>
+</config>
