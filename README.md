@@ -17,6 +17,21 @@ bin/magento setup:upgrade
 bin/magento cache:flush
 ```
 
+## Optional: Amasty Checkout Override
+
+If the project uses Amasty Checkout, install the dedicated template override package too:
+
+```bash
+composer config repositories.innoship_amasty vcs https://github.com/InnoshipTech/magento2-amasty-checkout-override.git
+composer require innoship/theme-amasty-checkout-override:^1.0
+bin/magento setup:upgrade
+bin/magento cache:flush
+```
+
+This package provides the override for:
+
+- `Amasty_CheckoutCore/web/template/onepage/shipping/methods.html`
+
 ## Features
 
 - InnoShip shipping carrier integration for Magento 2 checkout and order flows
