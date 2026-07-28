@@ -1,5 +1,18 @@
 # Changelog Innoship
 
+## [1.3.10]
+    - Fix serviceID determination on shipping price calculation (checkout rates)
+        - serviceID is now based on destination country vs sender country from `innoship_external` (same rule as AWB generation)
+        - Billing address country is only used as fallback when the external location is not found in DB
+        - Fix "No prices available" error for guest customers, where the billing country was still empty
+    - Log the failed /api/Price request in innoship log (serviceID, destination, sender, weight, external location, status)
+
+## [1.3.9]
+    - Add brandId support for integrator sub-couriers in locker (PUDO) map
+        - New `brandId` column in `innoship_pudo` table (varchar 256)
+        - brandId saved during `innoship:dataimport` command and cron import
+    - Display open hours table after locker selection in PUDO map modal
+
 ## [1.3.8]
     - Fix compatibility with Amasty_Checkout => billing city display none for multiple payment methods
 

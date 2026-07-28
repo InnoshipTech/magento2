@@ -185,6 +185,7 @@ class Pudoinnoship
                 'email' => $pudoChunk['email'] ?? '',
                 'phone' => $pudoChunk['phone'] ?? '',
                 'supportedPaymentType' => $pudoChunk['supportedPaymentType'] ?? '',
+                'brandId' => $pudoChunk['brandId'] ?? '',
                 'open_hours_mo_start' => $open_hours_mo_start,
                 'open_hours_mo_end' => $open_hours_mo_end,
                 'open_hours_tu_start' => $open_hours_tu_start,

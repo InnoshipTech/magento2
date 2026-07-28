@@ -23,6 +23,7 @@
         <column xsi:type="varchar" name="email" nullable="true" length="255" comment="email"/>
         <column xsi:type="varchar" name="phone" nullable="true" length="255" comment="phone"/>
         <column xsi:type="varchar" name="supportedPaymentType" length="255" nullable="true" comment="supportedPaymentType"/>
+        <column xsi:type="varchar" name="brandId" length="256" nullable="true" comment="brandId"/>
         <column xsi:type="varchar" name="open_hours_mo_start" nullable="true" length="50" comment="Open Hours Monday Start"/>
         <column xsi:type="varchar" name="open_hours_mo_end" nullable="true" length="50" comment="Open Hours Monday End"/>
         <column xsi:type="varchar" name="open_hours_tu_start" nullable="true" length="50" comment="Open Hours Tuesday Start"/>

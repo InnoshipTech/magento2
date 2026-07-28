@@ -2,6 +2,8 @@
 
 namespace InnoShip\InnoShip\Model;
 
+use InnoShip\InnoShip\Helper\ExternalSync;
+use InnoShip\InnoShip\Logger\Logger as InnoShipLogger;
 use InnoShip\InnoShip\Model\Api\Rest\Service;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Directory\Helper\Data;
@@ -74,6 +76,12 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
 
     protected $service;
 
+    /** @var ExternalSync */
+    protected $externalSync;
+
+    /** @var InnoShipLogger */
+    protected $innoShipLogger;
+
     /** @var Json */
     protected $serializer;
 
@@ -104,6 +112,8 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
      * @param Config\Source\Method $method
      * @param array $data
      * @param ProxyDeferredFactory|null $proxyDeferredFactory
+     * @param ExternalSync|null $externalSync
+     * @param InnoShipLogger|null $innoShipLogger
      */
     public function __construct(
         ScopeConfigInterface $scopeConfig,
@@ -129,7 +139,9 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
         DataObjectFactory $dataObjectFactory,
         Config\Source\Method $method,
         array $data = [],
-        ?ProxyDeferredFactory $proxyDeferredFactory = null
+        ?ProxyDeferredFactory $proxyDeferredFactory = null,
+        ?ExternalSync $externalSync = null,
+        ?InnoShipLogger $innoShipLogger = null
     ) {
         parent::__construct(
             $scopeConfig,
@@ -159,6 +171,8 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
         $this->productRepository = $productRepository;
         $this->orderModel = $orderModel;
         $this->service = $service;
+        $this->externalSync = $externalSync ?? ObjectManager::getInstance()->get(ExternalSync::class);
+        $this->innoShipLogger = $innoShipLogger ?? ObjectManager::getInstance()->get(InnoShipLogger::class);
     }
 
     /**
@@ -438,10 +452,28 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
                         $shippingCity = '';
                     }
 
-                    if ((string) $shippingCountry === (string) $quoteBillingData->getData('country_id')) {
-                        $serviceID = 1;
+                    // Ensure there's at least one external location ID (sender location)
+                    $externalLocationId = isset($externalLocationIdAll[0]) ? trim((string) $externalLocationIdAll[0]) : '';
+
+                    /**
+                     * Determine Service ID by comparing the DESTINATION country with the SENDER country.
+                     * Same rule as Controller\Adminhtml\Awb\Save: 1 = domestic, 5 = international.
+                     * The billing address is only a fallback — it is empty for guests, which previously
+                     * forced serviceID 5 on domestic shipments and made the API return "No prices available".
+                     */
+                    $externalLocation = $externalLocationId !== ''
+                        ? $this->externalSync->getExternalLocationByExternalId($externalLocationId)
+                        : null;
+
+                    if ($externalLocation) {
+                        $serviceID = strcasecmp((string) $shippingCountry, (string) $externalLocation->getCountryCode()) === 0 ? 1 : 5;
                     } else {
-                        $serviceID = 5;
+                        $billingCountry = (string) $quoteBillingData->getData('country_id');
+                        if ($billingCountry === '') {
+                            $serviceID = 1;
+                        } else {
+                            $serviceID = strcasecmp((string) $shippingCountry, $billingCountry) === 0 ? 1 : 5;
+                        }
                     }
 
                     if (is_array($shippingRegio)) {
@@ -494,9 +526,6 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
                             $weightSend = $volumetrieCh;
                         }
 
-                        // Ensure there's at least one external location ID
-                        $externalLocationId = isset($externalLocationIdAll[0]) ? $externalLocationIdAll[0] : '';
-
                         $requestData = [
                             "ServiceId" => $serviceID,
                             "ShipmentDate" => date("Y-m-d\TH:i:s"),
@@ -533,6 +562,25 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
                                     $price = round($priceFromRate * $multiplicator, 2);
                                 }
                             }
+                        } else {
+                            // Log the request that produced the error so the correlationId can be matched
+                            // to the actual payload. No personal data is included.
+                            $this->innoShipLogger->error(
+                                'Price request failed: ' . $this->jsonSerializer->serialize(
+                                    [
+                                        'store_id' => $storeId,
+                                        'service_id' => $serviceID,
+                                        'country' => $shippingCountry,
+                                        'county' => $shippingRegio,
+                                        'locality' => $shippingCity,
+                                        'total_weight' => $weightSend,
+                                        'external_client_location' => $externalLocationId,
+                                        'sender_country' => $externalLocation ? $externalLocation->getCountryCode() : null,
+                                        'status_code' => $response['status_code'] ?? null,
+                                        'status_message' => $response['status_message'] ?? null,
+                                    ]
+                                )
+                            );
                         }
                     }
                 }

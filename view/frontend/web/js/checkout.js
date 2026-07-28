@@ -1195,6 +1195,29 @@ require([
         });
     }
 
+    function buildOpenHoursHtml(pudoData) {
+        if (!pudoData) { return ''; }
+        var days = [
+            { key: 'mo', label: $.mage.__('Monday')    },
+            { key: 'tu', label: $.mage.__('Tuesday')   },
+            { key: 'we', label: $.mage.__('Wednesday') },
+            { key: 'th', label: $.mage.__('Thursday')  },
+            { key: 'fr', label: $.mage.__('Friday')    },
+            { key: 'sa', label: $.mage.__('Saturday')  },
+            { key: 'su', label: $.mage.__('Sunday')    }
+        ];
+        var rows = '';
+        days.forEach(function (day) {
+            var start = pudoData['open_hours_' + day.key + '_start'];
+            var end   = pudoData['open_hours_' + day.key + '_end'];
+            if (start && end && start !== '' && end !== '') {
+                rows += '<tr><td style="padding:5px">' + escapeHtml(day.label) + '</td><td style="padding:5px">' + escapeHtml(start) + ' - ' + escapeHtml(end) + '</td></tr>';
+            }
+        });
+        if (!rows) { return ''; }
+        return '<br/><b style="padding-top: 20px; display: inline-block; width: 100%;">' + escapeHtml($.mage.__('Schedule')) + '</b><table class="innoship-open-hours"><tbody>' + rows + '</tbody></table>';
+    }
+
     function setMarkerPudo(pudoId, pudoLocation, clickFromMap = false) {
         if (pudoId == null) {
             window.localStorage['innoshipPud'] = pudoId;
@@ -1212,7 +1235,8 @@ require([
                 // Only escape the user-provided location data
                 var pudoDescription = window.localStorage['innoshipPudDescription']; // Contains safe HTML from backend
                 var escapedLocation = escapeHtml(pudoLocation);
-                $('.innomapliv').html("<b>" + $.mage.__('Shipping point selected') + "</b> " + pudoDescription + "<br/><b>" + $.mage.__('Address:') + "</b> " + escapedLocation);
+                var hoursHtml = (allDataPudo && allDataPudo[pudoId]) ? buildOpenHoursHtml(allDataPudo[pudoId]) : '';
+                $('.innomapliv').html("<b>" + $.mage.__('Shipping point selected') + "</b> " + pudoDescription + "<br/><b>" + $.mage.__('Address:') + "</b> " + escapedLocation + hoursHtml);
                 $('#innoshipcargusalegeconf').css('display', 'inline-block');
                 if (customer.isLoggedIn()) {
                     $('#innoshipsalveazafavorit').css('display', 'inline-block');

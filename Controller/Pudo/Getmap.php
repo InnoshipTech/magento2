@@ -130,24 +130,24 @@ class Getmap extends Action
             }
         }
 
-        // 7. Validate selected courier (comma-separated IDs)
+        // 7. Validate selected courier (comma-separated IDs or brandId strings)
+        $selectedCourierNumericIds = [];
+        $selectedCourierBrandIds = [];
         if ($selectedCourier) {
-            // Sanitize courier list
-            $courierIds = explode(',', $selectedCourier);
-            $validCourierIds = [];
-
-            foreach ($courierIds as $courierId) {
+            foreach (explode(',', $selectedCourier) as $courierId) {
                 $courierId = trim($courierId);
-                if (is_numeric($courierId) && $courierId > 0) {
-                    $validCourierIds[] = (int)$courierId;
+                if (is_numeric($courierId) && (int)$courierId > 0) {
+                    $selectedCourierNumericIds[] = (int)$courierId;
+                } elseif (!empty($courierId) && preg_match('/^[\w\s\-]+$/u', $courierId)) {
+                    $selectedCourierBrandIds[] = $courierId;
                 }
             }
 
-            if (empty($validCourierIds)) {
+            if (empty($selectedCourierNumericIds) && empty($selectedCourierBrandIds)) {
                 return $resultJson->setData(['error' => __('Invalid courier selection.')]);
             }
 
-            $selectedCourier = implode(',', $validCourierIds);
+            $selectedCourier = implode(',', array_merge($selectedCourierNumericIds, $selectedCourierBrandIds));
         }
 
         if ($quoteId) {
@@ -225,14 +225,17 @@ class Getmap extends Action
             $allRows = $connection->fetchAll($result, $bind);
 
             foreach ($allRows as $pudoValue) {
-                if (isset($pudoValue['courierId']) && isset($courierNames[$pudoValue['courierId']])) {
-                    $pudoValue['infoShow'] = $pudoValue['name'] . "<br/><b>Curier:</b> " . $courierNames[$pudoValue['courierId']];
-                    $pudoValue['addressText'] = str_replace(","," ", $pudoValue['addressText']);
+                $hasCourierName = isset($pudoValue['courierId']) && isset($courierNames[$pudoValue['courierId']]);
+                $hasBrandId = !empty($pudoValue['brandId']);
+                if ($hasCourierName || $hasBrandId) {
+                    $courierLabel = $hasBrandId ? ucfirst($pudoValue['brandId']) : $courierNames[$pudoValue['courierId']];
+                    $pudoValue['infoShow'] = $pudoValue['name'] . "<br/><b>Curier:</b> " . $courierLabel;
+                    $pudoValue['addressText'] = str_replace(",", " ", $pudoValue['addressText']);
                     $allPudo[$pudoValue['pudo_id']] = $pudoValue;
                 }
             }
 
-            $result = $connection->select()->distinct(true)->from($table, array("courierId"))
+            $result = $connection->select()->distinct(true)->from($table, array("courierId", "brandId"))
                 //->where('localityName = :localityParameter')->where('isActive = 1')->where('latitude != 0.000000')->where("localityName <> 'Bucuresti'")->where("supportedPaymentType in ('Card, Cash','Cash','Card')")->order('localityName ASC');
                 ->where('isActive = 1')
                 ->where('latitude != 0.000000')
@@ -245,7 +248,9 @@ class Getmap extends Action
             $allRowsCourier = $connection->fetchAll($result, $bind);
 
             foreach ($allRowsCourier as $courierValue) {
-                if (isset($courierValue['courierId']) && isset($courierNames[$courierValue['courierId']])) {
+                if (!empty($courierValue['brandId'])) {
+                    $courierList[$courierValue['brandId']] = ucfirst($courierValue['brandId']);
+                } elseif (isset($courierValue['courierId']) && isset($courierNames[$courierValue['courierId']])) {
                     $courierList[$courierValue['courierId']] = $courierNames[$courierValue['courierId']];
                 }
             }
@@ -282,7 +287,16 @@ class Getmap extends Action
                 );
 
             if ($selectedCourier) {
-                $result->where('courierId IN (?)', explode(',', $selectedCourier));
+                $conditions = [];
+                if (!empty($selectedCourierNumericIds)) {
+                    $conditions[] = $connection->quoteInto('courierId IN (?)', $selectedCourierNumericIds);
+                }
+                if (!empty($selectedCourierBrandIds)) {
+                    $conditions[] = $connection->quoteInto('brandId IN (?)', $selectedCourierBrandIds);
+                }
+                if (!empty($conditions)) {
+                    $result->where('(' . implode(' OR ', $conditions) . ')');
+                }
             }
 
             $result->order(['localityName ASC', 'name ASC']);
@@ -294,8 +308,11 @@ class Getmap extends Action
             $this->logger->info('InnoShip Getmap: Found lockers in radius', ['count' => count($allRows)]);
 
             foreach ($allRows as $pudoValue) {
-                if (isset($pudoValue['courierId']) && isset($courierNames[$pudoValue['courierId']])) {
-                    $pudoValue['infoShow'] = $pudoValue['name'] . "<br/><b>Curier:</b> " . $courierNames[$pudoValue['courierId']];
+                $hasCourierName = isset($pudoValue['courierId']) && isset($courierNames[$pudoValue['courierId']]);
+                $hasBrandId = !empty($pudoValue['brandId']);
+                if ($hasCourierName || $hasBrandId) {
+                    $courierLabel = $hasBrandId ? ucfirst($pudoValue['brandId']) : $courierNames[$pudoValue['courierId']];
+                    $pudoValue['infoShow'] = $pudoValue['name'] . "<br/><b>Curier:</b> " . $courierLabel;
                     $allPudo[$pudoValue['pudo_id']] = $pudoValue;
                 }
             }
@@ -303,7 +320,7 @@ class Getmap extends Action
             // Get list of available couriers in the radius
             $resultCouriers = $connection->select()
                 ->distinct(true)
-                ->from($table, array("courierId"))
+                ->from($table, array("courierId", "brandId"))
                 ->where('isActive = 1')
                 ->where('latitude != 0.000000')
                 ->where("supportedPaymentType IN ('Card, Cash', 'Cash', 'Card')")
@@ -315,7 +332,9 @@ class Getmap extends Action
             $allRowsCourier = $connection->fetchAll($resultCouriers);
 
             foreach ($allRowsCourier as $courierValue) {
-                if (isset($courierValue['courierId']) && isset($courierNames[$courierValue['courierId']])) {
+                if (!empty($courierValue['brandId'])) {
+                    $courierList[$courierValue['brandId']] = ucfirst($courierValue['brandId']);
+                } elseif (isset($courierValue['courierId']) && isset($courierNames[$courierValue['courierId']])) {
                     $courierList[$courierValue['courierId']] = $courierNames[$courierValue['courierId']];
                 }
             }
@@ -328,12 +347,13 @@ class Getmap extends Action
                 $courierNames[$itemCourierNameItem['courierId']] = $itemCourierNameItem['courierName'];
             }
 
-            $result = $connection->select()->from($table, array("name", "courierId"))->where('pudo_id = :pudoSelectedParameter');
+            $result = $connection->select()->from($table, array("name", "courierId", "brandId"))->where('pudo_id = :pudoSelectedParameter');
             $bind = ['pudoSelectedParameter' => $pudoSelectedParameter];
             $allRows = $connection->fetchAll($result, $bind);
 
             foreach ($allRows as $courierValue) {
-                $pudoSelected[$pudoSelectedParameter]['infoShow'] = $courierValue['name'] . "<br/><b>Curier:</b> " . $courierNames[$courierValue['courierId']];
+                $courierLabel = !empty($courierValue['brandId']) ? ucfirst($courierValue['brandId']) : ($courierNames[$courierValue['courierId']] ?? '');
+                $pudoSelected[$pudoSelectedParameter]['infoShow'] = $courierValue['name'] . "<br/><b>Curier:</b> " . $courierLabel;
             }
         }
 
