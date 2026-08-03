@@ -173,8 +173,10 @@ class Citylist
 
     public function matchCounty($dataReceive,$judet)
     {
+        $judetNormalizat = $this->normalizeCountyName($judet);
+
         foreach($dataReceive as $judetInnoship){
-            if(strtolower($judetInnoship['countyNameLocalized']) === strtolower($judet)){
+            if($this->normalizeCountyName($judetInnoship['countyNameLocalized'] ?? '') === $judetNormalizat){
                 return $judetInnoship;
             }
         }
@@ -182,9 +184,37 @@ class Citylist
         return null;
     }
 
+    /**
+     * Normalize a county name for comparison: strip diacritics, lowercase, collapse separators
+     *
+     * @param string $countyName
+     * @return string
+     */
+    private function normalizeCountyName($countyName): string
+    {
+        $normalized = $this->eliminateDiacritice((string)$countyName);
+        $normalized = mb_strtolower($normalized, 'UTF-8');
+        $normalized = str_replace(array("-", "_"), " ", $normalized);
+        $normalized = preg_replace('/\s+/u', ' ', $normalized);
+
+        return trim($normalized);
+    }
+
     private function eliminateDiacritice($string)
     {
-        return str_replace(array("ș","ş","Ș","ț","ţ","Ț","Â","â","Ă","ă","Î","î","ă","ţ"),array("s","s","S","t","t","T","A","a","A","a","I","i","a","t"), $string);
+        return str_replace(
+            array(
+                "ș","Ș","ş","Ş",
+                "ț","Ț","ţ","Ţ",
+                "ă","Ă","â","Â","î","Î",
+            ),
+            array(
+                "s","S","s","S",
+                "t","T","t","T",
+                "a","A","a","A","i","I",
+            ),
+            $string
+        );
     }
 
     private function cleanString($string)
