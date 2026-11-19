@@ -85,6 +85,9 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
     /** @var Json */
     protected $serializer;
 
+    /** @var CourierPriceStore */
+    private $courierPriceStore;
+
 
     /**
      * Carrier constructor.
@@ -110,6 +113,7 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
      * @param Json $jsonSerializer
      * @param DataObjectFactory $dataObjectFactory
      * @param Config\Source\Method $method
+     * @param CourierPriceStore $courierPriceStore
      * @param array $data
      * @param ProxyDeferredFactory|null $proxyDeferredFactory
      * @param ExternalSync|null $externalSync
@@ -138,6 +142,7 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
         Json $jsonSerializer,
         DataObjectFactory $dataObjectFactory,
         Config\Source\Method $method,
+        CourierPriceStore $courierPriceStore,
         array $data = [],
         ?ProxyDeferredFactory $proxyDeferredFactory = null,
         ?ExternalSync $externalSync = null,
@@ -168,6 +173,7 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
         $this->jsonSerializer = $jsonSerializer;
         $this->serializer = $jsonSerializer;
         $this->method = $method;
+        $this->courierPriceStore = $courierPriceStore;
         $this->productRepository = $productRepository;
         $this->orderModel = $orderModel;
         $this->service = $service;
@@ -355,7 +361,19 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
                 if ($quote) {
                     $shippingAddress = $quote->getShippingAddress();
                     $customPrice = $shippingAddress->getInnoshipShippingPrice();
-                    if ($customPrice !== null && $customPrice !== '') {
+                    // Only for the locality Listcouriers priced it for: an estimate for a new city
+                    // otherwise showed the old city's courier price on the method row.
+                    if ($customPrice !== null && $customPrice !== ''
+                        && $this->courierPriceStore->isSelectionFor(
+                            (int) $quote->getId(),
+                            (int) $shippingAddress->getInnoshipCourierId(),
+                            $this->courierPriceStore->locationKey(
+                                (string) $request->getDestCountryId(),
+                                $request->getDestRegionId(),
+                                (string) $request->getDestCity()
+                            )
+                        )
+                    ) {
                         $price = (float) $customPrice;
                         // Skip other calculations if custom price is set
                         goto create_rate;
@@ -369,25 +387,7 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
             $countryFeesData = $this->getCountrySpecificFee($destinationCountry, $storeId);
             if ($countryFeesData !== null) {
                 $price = $countryFeesData['fee'];
-
-                // Check if free shipping threshold is met for this country
-                if (
-                    isset($countryFeesData['free_shipping_threshold']) &&
-                    !empty($countryFeesData['free_shipping_threshold']) &&
-                    $countryFeesData['free_shipping_threshold'] > 0
-                ) {
-
-                    $items = $request->getAllItems();
-                    $itemDiscountAmount = 0;
-                    foreach ($items as $item) {
-                        $itemDiscountAmount += $item->getDiscountAmount();
-                    }
-                    $subtotalFinal = $request->getBaseSubtotalInclTax() - $itemDiscountAmount;
-
-                    if ($subtotalFinal >= $countryFeesData['free_shipping_threshold']) {
-                        $price = 0.0;
-                    }
-                }
+                // the country free shipping threshold is checked after create_rate:
             } else {
                 // Fallback to old format for backward compatibility
                 $destinationHandlingFeeExt = explode(",", (string) $this->getConfigData('handling_fee_external', $storeId));
@@ -482,15 +482,13 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
 
                     #FIX when region is not available in QUOTE
                     if ($shippingRegio === '') {
-                        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-
                         $shippingRegioId = $quoteShippingData->getData('region_id');
                         if (is_array($shippingRegioId)) {
                             $shippingRegioIdUse = $shippingRegioId[0];
                         } else {
                             $shippingRegioIdUse = $shippingRegioId;
                         }
-                        $shippingRegioObj = $objectManager->create('Magento\Directory\Model\Region')->load($shippingRegioIdUse);
+                        $shippingRegioObj = $this->_regionFactory->create()->load($shippingRegioIdUse);
                         $shippingRegio = $shippingRegioObj['default_name'];
                         if ($shippingRegio === null) {
                             $shippingRegio = '';
@@ -587,6 +585,30 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
             }
             /***************************************************************************/
 
+            //            $price = (int)$request->getData('free_shipping');
+
+            create_rate:
+            // Free shipping is checked after the label, so it also applies to the courier chosen in
+            // checkout (the custom price used to jump over these checks).
+            $countryFeesData = $this->getCountrySpecificFee($request->getData('dest_country_id'), $storeId);
+            if (
+                $countryFeesData !== null &&
+                isset($countryFeesData['free_shipping_threshold']) &&
+                !empty($countryFeesData['free_shipping_threshold']) &&
+                $countryFeesData['free_shipping_threshold'] > 0
+            ) {
+                $items = $request->getAllItems();
+                $itemDiscountAmount = 0;
+                foreach ($items as $item) {
+                    $itemDiscountAmount += $item->getDiscountAmount();
+                }
+                $subtotalFinal = $request->getBaseSubtotalInclTax() - $itemDiscountAmount;
+
+                if ($subtotalFinal >= $countryFeesData['free_shipping_threshold']) {
+                    $price = 0.0;
+                }
+            }
+
             if ($this->getConfigData('free_shipping_enable', $storeId)) {
                 $items = $request->getAllItems();
                 $itemDiscountAmount = 0;
@@ -603,9 +625,6 @@ class Carrier extends AbstractCarrierOnline implements CarrierInterface
                 $price = 0.0;
             }
 
-            //            $price = (int)$request->getData('free_shipping');
-
-            create_rate:
             /** @var Method $method */
             $rate = $this->_rateMethodFactory->create();
 

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Checkout\Model\CompositeConfigProvider">
+        <arguments>
+            <argument name="configProviders" xsi:type="array">
+                <item name="innoship_locker_address_config_provider" xsi:type="object">InnoShip\InnoShip\Model\Checkout\LockerAddressConfigProvider</item>
+                <item name="innoship_selected_locker_config_provider" xsi:type="object">InnoShip\InnoShip\Model\Checkout\SelectedLockerConfigProvider</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="InnoShip\InnoShip\Model\Checkout\LockerAddressConfigProvider">
+        <arguments>
+            <argument name="customerSession" xsi:type="object">Magento\Customer\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="InnoShip\InnoShip\Model\Checkout\SelectedLockerConfigProvider">
+        <arguments>
+            <argument name="checkoutSession" xsi:type="object">Magento\Checkout\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+</config>

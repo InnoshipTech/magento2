@@ -1,0 +1,4 @@
+type StoreConfig @doc(description: "InnoShip shipping fees exposed in the store configuration.") {
+    innoship_handling_fee: String @doc(description: "InnoShip Curier handling fee (carriers/innoship/handling_fee).")
+    innoship_locker_handling_fee: String @doc(description: "InnoShip Locker handling fee (carriers/innoshipcargusgo/handling_fee).")
+}

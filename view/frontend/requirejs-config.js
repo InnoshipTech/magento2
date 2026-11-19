@@ -7,8 +7,15 @@ var config = {
             'Magento_Checkout/js/view/summary/shipping': {
                 'InnoShip_InnoShip/js/view/summary/shipping-mixin': true
             },
+            'Magento_Checkout/js/action/select-billing-address': {
+                'InnoShip_InnoShip/js/select-billing-address-mixin': true
+            },
             'Magento_Checkout/js/action/set-shipping-information': {
                 'InnoShip_InnoShip/js/set-city-mixin': true
+            },
+            // Amasty One Step Checkout only; inert elsewhere (see the file header)
+            'Magento_Checkout/js/action/place-order': {
+                'InnoShip_InnoShip/js/place-order-unsaved-shipping-mixin': true
             }
         }
     },
@@ -23,7 +30,7 @@ var config = {
             exports: 'L'
         },
         'markercluster': {
-            deps: ['L']
+            deps: ['leaflet']
         }
     }
 };

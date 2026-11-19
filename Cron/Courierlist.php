@@ -30,17 +30,18 @@ class Courierlist
      */
     public function execute()
     {
-        $url = "https://api.innoship.com/api/Location/ClientLocations";
+        $url = $this->config->getApiBaseUrl()."/api/Location/ClientLocations";
         $curl = curl_init($url);
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, Config::CURL_CONNECT_TIMEOUT);
+        curl_setopt($curl, CURLOPT_TIMEOUT, Config::CURL_TIMEOUT);
         $headers = array(
             "X-Api-Key: ".$this->config->getApiKey(),
         );
         curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         $allCouriers = curl_exec($curl);
         $allCouriersObj = json_decode($allCouriers);
-        curl_close($curl);
 
         $singleCourier = array();
         if(is_array($allCouriersObj)){

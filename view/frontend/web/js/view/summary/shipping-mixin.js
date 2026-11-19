@@ -54,7 +54,14 @@ define([
                     shippingMethodTitle+= " (" + pudoDescription+ ", " + window.localStorage['innoshipPudAddress'] + ")";
                     if(customer.isLoggedIn()){
                         // SECURITY: Escape HTML to prevent XSS
-                        var escapedPudoDescriptionLong = escapeHtml(pudoDescriptionLong);
+                        // Controller\Pudo\Getmap builds infoShow as name . "<br/><b>Curier:</b> " . courier: keep that
+                        // separator as markup, escape the locker name and the courier label (#18)
+                        var courierSeparator = '<br/><b>Curier:</b> ';
+                        var separatorAt = pudoDescriptionLong.indexOf(courierSeparator);
+                        var escapedPudoDescriptionLong = separatorAt === -1
+                            ? escapeHtml(pudoDescriptionLong)
+                            : escapeHtml(pudoDescriptionLong.substring(0, separatorAt)) + courierSeparator
+                                + escapeHtml(pudoDescriptionLong.substring(separatorAt + courierSeparator.length));
                         var escapedPudoAddress = escapeHtml(window.localStorage['innoshipPudAddress']);
                         $('.ship-to .shipping-information-content').html(escapedPudoDescriptionLong + "<br/><strong>Adresa:</strong> " + escapedPudoAddress);
                     }

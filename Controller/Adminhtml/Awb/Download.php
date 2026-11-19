@@ -84,7 +84,8 @@ class Download extends Action
         $filePath = preg_replace('#/+#', '/', $filePath); // Remove double slashes
 
         // SECURITY: Build the full file path
-        $fullFilePath = $mediaPath . $filePath . $fileName;
+        // The trim above drops the trailing slash: without a separator "innoship/" + "awb.pdf" became "innoshipawb.pdf".
+        $fullFilePath = $mediaPath . ($filePath !== '' ? $filePath . '/' : '') . $fileName;
 
         // SECURITY: Resolve the real path and validate it's within media directory
         $realFilePath = realpath($fullFilePath);
@@ -95,8 +96,9 @@ class Download extends Action
             return $this->_redirect('adminhtml/dashboard');
         }
 
-        // SECURITY: Ensure the resolved path is within the media directory
-        if (strpos($realFilePath, $realMediaPath) !== 0) {
+        // SECURITY: Ensure the resolved path is within the media directory (compared with a trailing separator).
+        $mediaPrefix = rtrim((string) $realMediaPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if ($realMediaPath === false || strpos($realFilePath, $mediaPrefix) !== 0 || !is_file($realFilePath)) {
             $this->messageManager->addErrorMessage(__('Access denied: Invalid file path.'));
             $this->logger->critical('Path traversal attempt detected', [
                 'requested_file' => $fileName,
@@ -117,7 +119,8 @@ class Download extends Action
             [
                 'type'  => "filename",
                 'value' => $realFilePath,
-                'rm'    => true,
+                // Never delete: the path comes from the request, so 'rm' let an admin URL remove any PDF under pub/media.
+                'rm'    => false,
             ],
             DirectoryList::MEDIA
         );

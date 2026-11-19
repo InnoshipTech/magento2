@@ -56,6 +56,10 @@
         <index referenceId="INNOSHIP_PUDO_COURIER_ID" indexType="btree">
             <column name="courierId"/>
         </index>
+        <index referenceId="INNOSHIP_PUDO_COUNTRY_POSTCODE" indexType="btree">
+            <column name="countryCode"/>
+            <column name="postalCode"/>
+        </index>
     </table>
 
     <table name="innoship_courierlist" resource="default" engine="innodb" comment="Innoship pudo">

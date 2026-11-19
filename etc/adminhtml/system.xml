@@ -57,6 +57,24 @@
                     <label>Default Order Content</label>
                 </field>
 
+                <field id="source_channel" translate="label comment" type="text" sortOrder="92" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>AWB Source Channel</label>
+                    <comment>Sent to InnoShip as the AWB source channel for orders of this store view. Empty = eCommerce.</comment>
+                </field>
+
+                <field id="complete_after_awb" translate="label comment" type="select" sortOrder="93" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Mark Order Complete after AWB</label>
+                    <comment>After the AWB is created, set the order state to Complete.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+
+                <field id="innoship_courier_payment_restriction" translate="label comment" type="multiselect" sortOrder="55" showInDefault="1" showInWebsite="1" showInStore="0" canRestore="1">
+                    <label>Allow Payment Methods</label>
+                    <comment>Payment methods offered with this shipping method. None selected = all methods.</comment>
+                    <source_model>InnoShip\InnoShip\Model\Config\Source\PaymentRestrictions</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+
                 <field id="saturday_delivery" translate="label" type="select" sortOrder="100" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Saturday Delivery</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
@@ -268,6 +286,14 @@
                     </depends>
                 </field>
 
+                <field id="product_for_locker" translate="label comment" type="text" sortOrder="154" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Product Attribute Allowed in Locker</label>
+                    <comment>Code of a Yes/No product attribute. Locker is hidden when a cart product has it set to No. Empty = no check.</comment>
+                    <depends>
+                        <field id="check_if_available">1</field>
+                    </depends>
+                </field>
+
                 <field id="payment" translate="label" type="select" sortOrder="160" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Transport Payment</label>
                     <source_model>InnoShip\InnoShip\Model\Config\Source\Payment</source_model>
@@ -326,7 +352,6 @@
                     <validate>validate-number validate-zero-or-greater</validate>
                 </field>
             </group>
-            <resource>InnoShip_InnoShop::innoship_configuration</resource>
         </section>
     </system>
 </config>

@@ -2,7 +2,9 @@
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="checkout"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <head>
-        <script src="InnoShip_InnoShip::js/checkout.js"/>
+        <!-- defer: the top-level require(['leaflet', ..., 'uiRegistry']) must run after requirejs-config.js,
+             or the aliases resolve as literal paths and 404 -->
+        <script src="InnoShip_InnoShip::js/checkout.js" defer="defer"/>
         <css src="InnoShip_InnoShip::css/leaflet.css"/>
         <css src="InnoShip_InnoShip::css/style.css"/>
     </head>

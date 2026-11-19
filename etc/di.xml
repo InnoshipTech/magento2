@@ -37,6 +37,36 @@
                 disabled="false"/>
     </type>
 
+    <!--
+        Guards the selected locker at the single point where Magento re-imports a customer address
+        book entry over the quote shipping address.
+    -->
+    <type name="Magento\Quote\Model\ShippingAddressManagement">
+        <plugin name="InnoShip_InnoShip_Plugin_Magento_Quote_Model_ShippingAddressManagement"
+                type="InnoShip\InnoShip\Plugin\Magento\Quote\Model\ShippingAddressManagement"
+                sortOrder="10"
+                disabled="false"/>
+    </type>
+
+    <!--
+        Keeps the locker on the quote shipping address when a totals estimate posts the browser's
+        shipping address (the customer's saved card) over it.
+    -->
+    <type name="Magento\Checkout\Model\TotalsInformationManagement">
+        <plugin name="InnoShip_InnoShip_Plugin_Magento_Checkout_Model_TotalsInformationManagement"
+                type="InnoShip\InnoShip\Plugin\Magento\Checkout\Model\TotalsInformationManagement"
+                sortOrder="10"
+                disabled="false"/>
+    </type>
+
+    <!-- Keeps a locker shipping address out of the customer address book at place-order time. -->
+    <type name="Magento\Quote\Model\QuoteManagement">
+        <plugin name="InnoShip_InnoShip_Plugin_Magento_Quote_Model_QuoteManagement"
+                type="InnoShip\InnoShip\Plugin\Magento\Quote\Model\QuoteManagement"
+                sortOrder="10"
+                disabled="false"/>
+    </type>
+
     <type name="Magento\Quote\Model\Quote\Address\ToOrderAddress">
         <plugin name="InnoShip_InnoShipGo_Plugin_Magento_Quote_Model_Quote_Address_ToOrderAddress"
                 type="InnoShip\InnoShip\Plugin\Magento\Quote\Model\Quote\Address\ToOrderAddress" sortOrder="99"

@@ -6,4 +6,7 @@
     <event name="sales_order_save_after">
         <observer name="save_data" instance="InnoShip\InnoShip\Observer\AddPudoFieldValue"  />
     </event>
+    <event name="payment_method_is_active">
+        <observer name="innoship_restrict_payment_method" instance="InnoShip\InnoShip\Observer\RestrictPaymentMethod" />
+    </event>
 </config>

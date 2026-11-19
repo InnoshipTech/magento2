@@ -1,12 +1,31 @@
 <?php
 namespace InnoShip\InnoShip\Console;
 
+use InnoShip\InnoShip\Cron\CitylistFactory;
+use InnoShip\InnoShip\Cron\CourierlistFactory;
+use InnoShip\InnoShip\Cron\PudoinnoshipFactory;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class Initialimport extends Command
 {
+    private CourierlistFactory $courierlistFactory;
+    private PudoinnoshipFactory $pudoinnoshipFactory;
+    private CitylistFactory $citylistFactory;
+
+    public function __construct(
+        CourierlistFactory $courierlistFactory,
+        PudoinnoshipFactory $pudoinnoshipFactory,
+        CitylistFactory $citylistFactory,
+        ?string $name = null
+    ) {
+        $this->courierlistFactory = $courierlistFactory;
+        $this->pudoinnoshipFactory = $pudoinnoshipFactory;
+        $this->citylistFactory = $citylistFactory;
+        parent::__construct($name);
+    }
+
     protected function configure()
     {
         $this->setName('innoship:dataimport');
@@ -16,22 +35,20 @@ class Initialimport extends Command
     }
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-
         $output->writeln("Import Courier List");
-        $importCourierList = $objectManager->create(\InnoShip\InnoShip\Cron\Courierlist::class);
+        $importCourierList = $this->courierlistFactory->create();
         $importCourierList->execute();
         $output->writeln("Import Courier List - DONE");
         $output->writeln("-------------------------------------------");
 
         $output->writeln("Import Locker List");
-        $importCourierList = $objectManager->create(\InnoShip\InnoShip\Cron\Pudoinnoship::class);
+        $importCourierList = $this->pudoinnoshipFactory->create();
         $importCourierList->execute();
         $output->writeln("Import Locker - DONE");
         $output->writeln("-------------------------------------------");
 
         $output->writeln("Import City's List");
-        $importCourierList = $objectManager->create(\InnoShip\InnoShip\Cron\Citylist::class);
+        $importCourierList = $this->citylistFactory->create();
         $importCourierList->execute();
         $output->writeln("Import City's - DONE");
 

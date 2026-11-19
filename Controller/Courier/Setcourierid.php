@@ -13,7 +13,9 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Data\Form\FormKey\Validator as FormKeyValidator;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Quote\Api\CartRepositoryInterface;
-use Magento\Quote\Model\MaskedQuoteIdToQuoteIdInterface;
+use InnoShip\InnoShip\Model\Config;
+use InnoShip\InnoShip\Model\CourierPriceStore;
+use InnoShip\InnoShip\Model\SessionQuoteId;
 use Psr\Log\LoggerInterface;
 
 class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareActionInterface
@@ -21,23 +23,29 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
     private $_resourceConnection;
     private $resultJsonFactory;
     public $quoteRepository;
-    private $maskedQuoteIdToQuoteId;
+    private $sessionQuoteId;
+    private $courierPriceStore;
     private $logger;
     private $formKeyValidator;
+    private $config;
 
     public function __construct(
         Context $context,
         ResourceConnection $resourceConnection,
         JsonFactory $resultJsonFactory,
         CartRepositoryInterface $quoteRepository,
-        MaskedQuoteIdToQuoteIdInterface $maskedQuoteIdToQuoteId,
+        SessionQuoteId $sessionQuoteId,
         LoggerInterface $logger,
-        FormKeyValidator $formKeyValidator
+        FormKeyValidator $formKeyValidator,
+        CourierPriceStore $courierPriceStore,
+        Config $config
     ) {
+        $this->config = $config;
         $this->_resourceConnection = $resourceConnection;
         $this->resultJsonFactory = $resultJsonFactory;
         $this->quoteRepository = $quoteRepository;
-        $this->maskedQuoteIdToQuoteId = $maskedQuoteIdToQuoteId;
+        $this->sessionQuoteId = $sessionQuoteId;
+        $this->courierPriceStore = $courierPriceStore;
         $this->logger = $logger;
         $this->formKeyValidator = $formKeyValidator;
         parent::__construct($context);
@@ -75,6 +83,14 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
     public function execute()
     {
         $resultJson = $this->resultJsonFactory->create();
+
+        // The courier choice exists only when the courier list is enabled for this store.
+        if (!$this->config->getShowcourierlist()) {
+            return $resultJson->setData([
+                'error' => __('Unable to update shipping method. Please try again.'),
+                'success' => false
+            ]);
+        }
 
         $quoteId = $this->getRequest()->getParam('quote');
         $courierId = $this->getRequest()->getParam('cid');
@@ -115,11 +131,18 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
             }
         }
 
-        try {
-            $quoteIdNr = $this->maskedQuoteIdToQuoteId->execute($quoteId);
-        } catch (\Exception $exception) {
-            $quoteIdNr = $quoteId;
+        // Only the visitor's own quote (checkout session).
+        $quoteIdNr = $this->sessionQuoteId->resolve($quoteId);
+        if ($quoteIdNr === null) {
+            return $resultJson->setData([
+                'error' => __('Unable to update shipping method. Please try again.'),
+                'success' => false
+            ]);
         }
+
+        // The price charged is the one Listcouriers quoted for this courier:
+        // Model\Carrier::collectRates() uses innoship_shipping_price as the courier rate.
+        $price = $this->courierPriceStore->get($quoteIdNr, $courierId);
 
         try {
             $quote = $this->quoteRepository->get($quoteIdNr);
@@ -131,9 +154,12 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
             // Get courier name from local storage (passed from frontend)
             $courierName = '';
 
-            // Update shipping amount if price is provided
-            if ($price !== null && $price !== '') {
-                $priceFloat = (float) $price;
+            // Update shipping amount if a price was quoted for this courier
+            if ($price === null) {
+                // No quoted price: let the carrier price the courier itself.
+                $shippingAddress->setInnoshipShippingPrice(null);
+            } else {
+                $priceFloat = $price;
 
                 $shippingAddress->setShippingMethod('innoship_1');
                 $shippingAddress->setCollectShippingRates(true);
@@ -148,6 +174,8 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
                 $shippingAddress->setShippingAmount($priceFloat);
                 $shippingAddress->setBaseShippingAmount($priceFloat);
                 $shippingAddress->setInnoshipShippingPrice($priceFloat);
+                // the ShippingInformationManagement plugin drops this price once the address changes
+                $this->courierPriceStore->rememberSelection($quoteIdNr, $courierId);
 
                 // Get shipping method title from config
                 $connection = $this->_resourceConnection->getConnection();
@@ -172,7 +200,6 @@ class Setcourierid extends Action implements HttpPostActionInterface, CsrfAwareA
             $this->quoteRepository->save($quote);
 
             return $resultJson->setData([
-                'shippinginfo' => $quote->getId() . " - " . $quote->getStoreId(),
                 'courierId' => $courierId,
                 'courierName' => $courierName,
                 'price' => $price,

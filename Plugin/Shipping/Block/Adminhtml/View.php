@@ -6,6 +6,7 @@ use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Shipping\Block\Adminhtml\View as ShippingView;
 use Magento\Framework\UrlInterface;
+use Magento\Framework\View\LayoutInterface;
 use InnoShip\InnoShip\Model\Carrier;
 use InnoShip\InnoShip\Model\Config;
 
@@ -48,9 +49,10 @@ class View
     }
 
     /**
-     * @param ShippingView $view
+     * @param ShippingView    $view
+     * @param LayoutInterface $layout
      */
-    public function beforeSetLayout(ShippingView $view)
+    public function beforeSetLayout(ShippingView $view, LayoutInterface $layout)
     {
         $order       = $this->getOrder($view->getShipment()->getOrderId());
         $hasTracks   = false;

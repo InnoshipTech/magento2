@@ -15,6 +15,19 @@
                 <sallowspecific>0</sallowspecific>
                 <specificcountry>RO</specificcountry>
                 <showmethod>0</showmethod>
+                <source_channel/>
+                <complete_after_awb>0</complete_after_awb>
+                <innoship_courier_payment_restriction/>
+                <!-- Defaults for fields read through typed getters in Model\Config (TypeError when unset) -->
+                <payment>Sender</payment>
+                <repayment>Bank</repayment>
+                <saturday_delivery>0</saturday_delivery>
+                <open_package>0</open_package>
+                <insurance_included>0</insurance_included>
+                <free_shipping_enable>0</free_shipping_enable>
+                <automatic_price>0</automatic_price>
+                <showcourierlist>0</showcourierlist>
+                <labelformat>A4</labelformat>
                 <specificerrmsg>This shipping method is currently unavailable. If you would like to ship using this shipping method, please contact us.</specificerrmsg>
             </innoship>
             <innoshipcargusgo>
@@ -25,6 +38,7 @@
                 <allowed_methods>1</allowed_methods>
                 <handling_fee>0</handling_fee>
                 <model>InnoShip\InnoShip\Model\Carriergo</model>
+                <product_for_locker/>
                 <sallowspecific>0</sallowspecific>
                 <specificcountry>RO</specificcountry>
                 <showmethod>0</showmethod>

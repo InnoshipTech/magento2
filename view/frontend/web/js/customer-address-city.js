@@ -30,6 +30,9 @@ define([
         /** @var {string} */
         _initialCity: '',
 
+        /** @var {MutationObserver|null} */
+        _regionObserver: null,
+
         /**
          * Widget initialization
          *
@@ -49,6 +52,37 @@ define([
 
             this._bindEvents();
             this._onCountryChange();
+            this._awaitSavedRegion();
+        },
+
+        /**
+         * Editing a saved address: Magento's region updater fills #region_id and selects the saved county
+         * after this widget starts, without a change event, so the city select was never loaded. Watch the
+         * options being filled and load the cities once a county is selected.
+         *
+         * @private
+         */
+        _awaitSavedRegion: function () {
+            if (parseInt(this._regionEl.val(), 10) > 0 || !this._regionEl.length || !window.MutationObserver) {
+                return;
+            }
+            this._regionObserver = new MutationObserver(function () {
+                if (parseInt(this._regionEl.val(), 10) > 0) {
+                    this._stopAwaitingRegion();
+                    this._onCountryChange();
+                }
+            }.bind(this));
+            this._regionObserver.observe(this._regionEl[0], {childList: true});
+        },
+
+        /**
+         * @private
+         */
+        _stopAwaitingRegion: function () {
+            if (this._regionObserver) {
+                this._regionObserver.disconnect();
+                this._regionObserver = null;
+            }
         },
 
         /**
@@ -85,6 +119,9 @@ define([
         _onRegionChange: function () {
             var self = this,
                 regionId = this._regionEl.val();
+
+            // the customer picked a county: the saved one no longer matters
+            this._stopAwaitingRegion();
 
             if (this._countryEl.val() !== 'RO') {
                 return;
@@ -194,6 +231,7 @@ define([
          * @private
          */
         _destroy: function () {
+            this._stopAwaitingRegion();
             this._selectEl.remove();
             this._cityEl.show();
             this._countryEl.off('change');

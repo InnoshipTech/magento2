@@ -7,8 +7,12 @@ require([
     'Magento_Checkout/js/model/cart/totals-processor/default',
     'Magento_Checkout/js/model/cart/cache',
     'Magento_Checkout/js/action/set-shipping-information',
-    'uiRegistry'
-], function ($, customerData, L, quote, customer, defaultTotal, cartCache, setShippingInformationAction, registry) {
+    'uiRegistry',
+    'Magento_Catalog/js/price-utils',
+    'InnoShip_InnoShip/js/checkout/helpers',
+    'InnoShip_InnoShip/js/checkout/courier-address',
+    'InnoShip_InnoShip/js/checkout/favorite-locker'
+], function ($, customerData, L, quote, customer, defaultTotal, cartCache, setShippingInformationAction, registry, priceUtils, helpers) {
 
     /**
      * SECURITY: HTML escape function to prevent XSS attacks
@@ -40,6 +44,9 @@ require([
     let courierList;
     let timeDiff = 0;
     let timeDiffRadio = 0;
+    let lastCourierListRequest = 0;
+    let courierListRetryTimer = null;
+    let lastCourierListLocation = '';
     let allDataList;
     let htmlDataListCouriers;
     let dataJsonCountryAlege = '<option value="">Tara</option>';
@@ -73,9 +80,21 @@ require([
     window.localStorage.removeItem('innoshipCourierSelected');
     window.localStorage.removeItem('innoshipCourierSelectedName');
     window.localStorage.removeItem('innoshipPudDescription');
+    // The last locker picked in this checkout visit only (see clearStoredPudo()).
+    window.localStorage.removeItem('innoshipLastPud');
+    window.localStorage.removeItem('innoshipLastPudAddress');
+    window.localStorage.removeItem('innoshipLastPudDescription');
     window.timeNow = Math.floor(Date.now() / 1000);
     window.timeNowRadio = window.timeNow;
     window.localStorage['innoshipPudDescription'] = '';
+    // N17: after a reload the quote still holds the locker (Model/Checkout/SelectedLockerConfigProvider);
+    // put it back in the keys cleared above so initDisplayOnMap() shows it again. It wins over the favourite.
+    let innoshipQuoteLocker = window.checkoutConfig && window.checkoutConfig.innoshipSelectedLocker;
+    let hasQuoteLocker = !!(innoshipQuoteLocker && parseInt(innoshipQuoteLocker.id, 10) > 0 && innoshipQuoteLocker.address);
+    if (hasQuoteLocker) {
+        window.localStorage['innoshipPud'] = String(innoshipQuoteLocker.id);
+        window.localStorage['innoshipPudAddress'] = innoshipQuoteLocker.address;
+    }
     if (typeof window.localStorage['innoshipFirstAddress'] === 'undefined') {
         window.localStorage['innoshipFirstAddress'] = false;
     }
@@ -95,9 +114,12 @@ require([
             if (customer.customerData.custom_attributes) {
                 if (customer.customerData.custom_attributes.favorite_locker_name) {
                     window.innoshipLockerFavoriteValue = customer.customerData.custom_attributes.favorite_locker_name.value;
-                    window.localStorage['innoshipPudAddress'] = window.innoshipLockerFavoriteValue;
+                    if (!hasQuoteLocker) {
+                        window.localStorage['innoshipPudAddress'] = window.innoshipLockerFavoriteValue;
+                    }
                 }
-                if (customer.customerData.custom_attributes.favorite_locker) {
+                // favorite_locker 0 means "no favourite" - loading it threw in setMarkerPudo on every checkout
+                if (customer.customerData.custom_attributes.favorite_locker && parseInt(customer.customerData.custom_attributes.favorite_locker.value, 10) > 0) {
                     $.ajax({
                         url: window.BASE_URL + "innoshipf/pudo/getmap",
                         type: "POST",
@@ -114,6 +136,10 @@ require([
                         }
 
                         window.innoshipLockerFavorite = customer.customerData.custom_attributes.favorite_locker.value;
+                        // the locker already on the quote stays (N17); the favourite remains one click away
+                        if (hasQuoteLocker) {
+                            return;
+                        }
                         allDataPudo = allDataPudoFavorite;
                         window.localStorage['innoshipPud'] = window.innoshipLockerFavorite;
 
@@ -135,12 +161,25 @@ require([
         //   2. Amasty only: also reset the shipping address UI, since Amasty has
         //      no "Next" button and the payment section is always visible.
         var isAmastyCheckout = $('#checkout').hasClass('am-checkout');
+        // The method already saved on the quote (core DefaultConfigProvider::getSelectedShippingMethod()); the first
+        // time the checkout restores it on load there is nothing to save.
+        var savedOnLoad = window.checkoutConfig && window.checkoutConfig.selectedShippingMethod;
+        var savedOnLoadCode = savedOnLoad ? savedOnLoad.carrier_code + '_' + savedOnLoad.method_code : '';
+        var methodAtSubscribe = quote.shippingMethod();
+        // Already restored before this subscriber exists: no restore event will come, and the customer's own
+        // later pick of that method would have been taken for it and not saved.
+        if (methodAtSubscribe && methodAtSubscribe.carrier_code + '_' + methodAtSubscribe.method_code === savedOnLoadCode) {
+            savedOnLoadCode = '';
+        }
         quote.shippingMethod.subscribe(function (newMethod) {
             if (!newMethod || !newMethod.method_code) {
                 return;
             }
 
             var fullCode = newMethod.carrier_code + '_' + newMethod.method_code;
+            var restoredOnLoad = savedOnLoadCode !== '' && fullCode === savedOnLoadCode;
+
+            savedOnLoadCode = '';
 
             if (fullCode === 'innoshipcargusgo_innoshipcargusgo_1') {
                 // Switching TO locker: billing-address-mixin.js immediately fires
@@ -152,21 +191,42 @@ require([
                 // Amasty's mixin fires before_shipping_save → shippingRegistry.register(),
                 // so Amasty's own subsequent validateAndSaveIfChanged finds nothing
                 // unsaved and skips — no duplicate save.
-                if (isAmastyCheckout) {
-                    setShippingInformationAction();
+                // Not for the reload restore of a locker already saved: Amasty's validateShipping() then ran before the
+                // guest e-mail form existed (jquery.validate "reading 'form'" TypeError, #B2-3).
+                if (isAmastyCheckout && !restoredOnLoad) {
+                    saveShippingFromForm();
                 }
+
+                // A stored locker (e.g. the favourite put back by checkout/favorite-locker.js) is shown by
+                // initDisplayOnMap(), which otherwise runs only when the method rows re-render — Amasty
+                // does not re-render them on a method change, so the locker line stayed empty.
+                showStoredLockerWhenReady();
                 return;
             }
 
             // Switched away from locker — clear the stored pudo id everywhere.
             clearStoredPudo();
 
+            // Courier list: the .fake-click handler never matches on the click that selects the
+            // method (Knockout re-renders the rows and detaches the clicked node), and the row
+            // observer fires only when the rows are re-rendered. Load it from the method change too
+            // (showCourierList() drops a repeat within 1 s). Only on the shipping step.
+            if (fullCode === 'innoship_1' && parseInt($('#showcourierlist').val()) === 1
+                && ($('#checkout-step-shipping').length === 0 || $('#checkout-step-shipping').is(':visible'))
+            ) {
+                $('#label_carrier_1_innoshippudom').show();
+                $('#label_carrier_1_innoshippudom td').html('Loading...');
+                showCourierList();
+            }
+
             if (!isAmastyCheckout) {
                 return;
             }
 
-            // Amasty-specific UI reset (no "Next" button to gate this on)
-            if ($('div[name="shippingAddress.country_id"]').is(':hidden')) {
+            // Amasty-specific UI reset (no "Next" button to gate this on). A customer with saved
+            // addresses keeps the form in the closed New Address pop-up (always :hidden): blanking it
+            // made the blank form the shipping address; checkout/courier-address.js restores the card.
+            if ($('div[name="shippingAddress.country_id"]').is(':hidden') && !hasSavedAddressCards()) {
                 showShippingAddressInformation();
             }
             $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom').hide();
@@ -174,7 +234,7 @@ require([
 
             if (customer.isLoggedIn()) {
                 $('#checkout-step-shipping').find('.field.addresses').show();
-                $('#checkout-step-shipping').find('.new-address-popup').show();
+                helpers.newAddressControls(true);
                 $('#shipping').find('.step-title').show();
                 if ($('.innoship-shipping-address-info-extra').length) {
                     $('.innoship-shipping-address-info-extra').html('').hide();
@@ -189,14 +249,78 @@ require([
             // Amasty's mixin fires before_shipping_save → shippingRegistry.register(),
             // so Amasty's own subsequent validateAndSaveIfChanged finds nothing
             // unsaved and skips — no duplicate save.
-            setShippingInformationAction();
+            saveShippingFromForm();
         });
+
+        // a picked courier (setcourierid → get-totals / estimateTotals) changes the charge: show it on the row
+        quote.totals.subscribe(showCurierRowPrice);
+
+        // A new locality needs its own courier prices, and nothing else re-requests the list on a city
+        // change: the county change sends the old city and the city change sends nothing, so the Curier
+        // row stayed empty. Only once a list was shown, for Curier with the list on, on the shipping step.
+        quote.shippingAddress.subscribe(function (address) {
+            let method = quote.shippingMethod();
+
+            if (!address || !address.city || lastCourierListLocation === ''
+                || !method || method.carrier_code + '_' + method.method_code !== 'innoship_1'
+                || parseInt($('#showcourierlist').val()) !== 1
+                || !($('#checkout-step-shipping').length === 0 || $('#checkout-step-shipping').is(':visible'))
+                || courierListLocation(address.countryId, address.regionId, address.city) === lastCourierListLocation
+            ) {
+                return;
+            }
+            $('#label_carrier_1_innoshippudom').show();
+            $('#label_carrier_1_innoshippudom td').html('Loading...');
+            showCourierList();
+        });
+
+        /**
+         * Amasty: save shipping information the way Amasty's validateAndSaveIfChanged does — first
+         * validateShippingInformation(), which copies the inline form (a phone typed after the last
+         * estimate included) into quote.shippingAddress, then the save. Calling the save alone sent the
+         * stale quote address (empty telephone) and Amasty then saw nothing unsaved.
+         */
+        var saveShippingDeferred = false;
+
+        function saveShippingFromForm() {
+            var shipping;
+
+            // Amasty's validateShipping() (shipping-mixin.js:255) reads registry.get('checkout.errors').messageContainer
+            // first: a method change before that component is registered (slow cold load) threw a TypeError. Wait for it,
+            // one deferred save at most.
+            if (!registry.get('checkout.errors')) {
+                if (!saveShippingDeferred) {
+                    saveShippingDeferred = true;
+                    registry.get('checkout.errors', function () {
+                        saveShippingDeferred = false;
+                        saveShippingFromForm();
+                    });
+                }
+
+                return;
+            }
+            shipping = registry.get('checkout.steps.shipping-step.shippingAddress');
+
+            if (shipping && typeof shipping.validateShippingInformation === 'function'
+                && !shipping.validateShippingInformation(true)
+            ) {
+                return;
+            }
+            setShippingInformationAction();
+        }
+
+        // the row may be inside the added node on the first render (helpers.addedNodeHasRow)
+        const addedNodeHasRow = helpers.addedNodeHasRow;
 
         const observer = new MutationObserver(function (mutations_list) {
             mutations_list.forEach(function (mutation) {
                 mutation.addedNodes.forEach(function (added_node) {
+                    let hasCourierRow = addedNodeHasRow(added_node, 'tr_method_1_innoship');
+                    if (hasCourierRow) {
+                        restoreCourierListAfterRender();
+                    }
                     timeDiff = Math.floor(Date.now() / 100) - window.timeNow;
-                    if (added_node.id == 'tr_method_1_innoship' && timeDiff >= 1) {
+                    if (hasCourierRow && timeDiff >= 1) {
                         $('.innshippingmethod').each(function () {
                             if (($(this).prop('checked') || $(this).is(':checked')) && $(this).val() === 'innoship_1' && parseInt($('#showcourierlist').val()) === 1) {
                                 $('#label_carrier_1_innoshippudom').show();
@@ -205,7 +329,7 @@ require([
                             }
                         });
                     }
-                    if (added_node.id == 'tr_method_innoshipcargusgo_1_innoshipcargusgo' && timeDiff >= 1) {
+                    if (addedNodeHasRow(added_node, 'tr_method_innoshipcargusgo_1_innoshipcargusgo') && timeDiff >= 1) {
                         setTimeout(function () {
                             window.timeNow = Math.floor(Date.now() / 1000);
                             initDisplayOnMap();
@@ -278,12 +402,17 @@ require([
             $('.innoship-mapsection-layer').fadeOut();
             $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom').show();
             $('#label_method_innoshipcargusgo_1_innoshipcargusgo').trigger("click");
-            setPudoValue();
             removeCloseMap(map);
-            displayPudoLocation(window.localStorage['innoshipPud'], window.localStorage['innoshipPudAddress'], false, false);
+            // The locker is written onto the quote shipping address by the setpudo controller.
+            // Filling the form below makes the checkout save shipping information, so that request
+            // must not start before setpudo has answered.
+            setPudoValue().always(function () {
+                displayPudoLocation(window.localStorage['innoshipPud'], window.localStorage['innoshipPudAddress'], false, false);
+            });
             if (!$('#checkout').hasClass('am-checkout')) {
                 cartCache.set('totals', null);
-                defaultTotal.estimateTotals();
+                // loadFromServer() posts _.pick(address, ...): with no address the totals are priced for an empty one
+                defaultTotal.estimateTotals(quote.shippingAddress());
             }
         });
 
@@ -335,9 +464,13 @@ require([
                             showShippingAddressInformation();
                         }
                     } else {
-                        showShippingAddressInformation();
+                        // a customer without saved addresses types into the visible inline form -
+                        // clear it only when a locker hid it, as for guests; never the pop-up form
+                        if ($('div[name="shippingAddress.country_id"]').is(":hidden") && !hasSavedAddressCards()) {
+                            showShippingAddressInformation();
+                        }
                         $('#checkout-step-shipping').find('.field.addresses').show();
-                        $('#checkout-step-shipping').find('.new-address-popup').show();
+                        helpers.newAddressControls(true);
                         $.each($(".shipping-address-item"), function () {
                             $(this).children('.action-select-shipping-item').show();
                         });
@@ -347,7 +480,7 @@ require([
                         $('#shipping').find('.step-title').show();
 
                         $('#checkout-step-shipping').find('.field.addresses').show();
-                        $('#checkout-step-shipping').find('.new-address-popup').show();
+                        helpers.newAddressControls(true);
                     }
 
                     $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom').hide();
@@ -435,8 +568,9 @@ require([
                                 $('input[name="billing-address-same-as-shipping"]').trigger('click').trigger('change');
                             }
                         }
+                        // the billing form vs saved card is decided by billing-address-mixin (KO visible binding);
+                        // a jQuery show() here opened the form under the card
                         $('.billing-address-same-as-shipping-block').hide();
-                        $('.checkout-billing-address .fieldset').show();
                     }, 1000);
                     return true;
                 } else {
@@ -513,8 +647,10 @@ require([
                 $.each(allDataPudo, function (i, item) {
                     //if (item['localityName'] === cityToSearchIn) {
                     heiStack = item['name'].toLowerCase();
-                    if (heiStack.search(valueSearch.toLowerCase()) > 0) {
-                        tmpLocationString = "" + item['addressText'] + ", " + item['pudo_id'] + ", " + item['localityName'] + ", " + item['countyName'] + ", " + item['postalCode'];
+                    // plain substring match - search() took the term as a regex and '> 0' skipped a match at the start of the name
+                    if (heiStack.indexOf(valueSearch.toLowerCase()) !== -1) {
+                        // street, city, county, postcode - the order fillShippingAddressInformation() reads
+                        tmpLocationString = "" + String(item['addressText']).replace(/,/g, ' ') + ", " + item['localityName'] + ", " + item['countyName'] + ", " + item['postalCode'];
                         // SECURITY: Escape HTML to prevent XSS
                         listFindSuccess += '<div class="pudosearchitemfound" data-pfid="' + escapeHtml(item['pudo_id']) + '" data-pfidl="' + escapeHtml(tmpLocationString) + '">' + escapeHtml(item['name']) + '</div>';
                     }
@@ -707,7 +843,48 @@ require([
         return address;
     }
 
+    /**
+     * Show the stored locker once both preconditions hold: the Locker radio is checked (Amasty checks
+     * it after the method change is published) and a locker id + address are stored (the favourite
+     * may be put back a moment later). Idempotent: does nothing when the locker line is already
+     * filled; stops after ~5 s.
+     * ponytail: short poll — neither precondition raises an event this file can subscribe to.
+     */
+    function showStoredLockerWhenReady() {
+        let attempts = 0;
+        let timer = setInterval(function () {
+            attempts++;
+            let lockerChecked = $('#tr_method_innoshipcargusgo_1_innoshipcargusgo input[type="radio"]').is(':checked');
+            let stored = parseInt(window.localStorage['innoshipPud']) > 0 && !!window.localStorage['innoshipPudAddress']
+                && window.localStorage['innoshipPudAddress'] !== 'null' && window.localStorage['innoshipPudAddress'] !== 'undefined';
+            let $line = $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom');
+            let shown = $line.is(':visible') && $.trim($line.find('td').text()) !== '';
+            let method = quote.shippingMethod();
+            let stillLocker = method && method.carrier_code === 'innoshipcargusgo';
+            // The customer opened the map to choose: a marker click stores the locker before Confirm, and
+            // initDisplayOnMap() would rebuild the open panel and apply that unconfirmed pick (IS47b).
+            let choosingOnMap = $('.innoship-mapsection').is(':visible');
+
+            if (!stillLocker || shown || choosingOnMap || attempts > 20) {
+                clearInterval(timer);
+                return;
+            }
+            if (lockerChecked && stored) {
+                clearInterval(timer);
+                initDisplayOnMap();
+            }
+        }, 250);
+    }
+
     function initDisplayOnMap() {
+        // The customer has the map open: rebuilding replaced it with a hidden copy (Amasty re-renders the method row
+        // ~2.5 s after Locker is chosen, then the row observer and the stored-locker poll both land here - an "Alege"
+        // click in between opened a panel that vanished, IS37), and the stored locker may be an unconfirmed marker
+        // pick (IS47b). A re-rendered row has a new, empty label, so this never skips a needed first render.
+        if ($('#label_carrier_innoshipcargusgo_1_innoshipcargusgo .innoship-mapsection').is(':visible')) {
+            return;
+        }
+
         // Load countryList lazily to avoid race condition
         // window.allowCountryLocker is already a JavaScript object, not a JSON string
         if (countryList === null && window.allowCountryLocker) {
@@ -725,7 +902,7 @@ require([
             '<div class="innoship-mapsection-layer">' +
             '   <div class="innoship-mapsection">' +
             '       <div class="innopudo-section-left">' +
-            '           <div class="innopudoheader"><div class="alege-locker-favorit-click">' + favoriteSvgOk + ' ' + window.innoshipLockerFavoriteValue + '</div></div>' +
+            '           <div class="innopudoheader"><div class="alege-locker-favorit-click">' + favoriteSvgOk + ' ' + escapeHtml(window.innoshipLockerFavoriteValue || '') + '</div></div>' +
             '           <div class="innopudoheader"><div id="locatiamea">' + locationSvg + '</div>' + $.mage.__('Select shipping address') + '</div>' +
             '           <div class="searchmap">' +
             '               <select id="innopudocountry">' + dataCountryHtml + '</select>'
@@ -753,7 +930,9 @@ require([
             $('.alege-locker-favorit-click').show();
         }
         if ($('#tr_method_innoshipcargusgo_1_innoshipcargusgo input[type="radio"]').is(":checked") && window.localStorage['innoshipPud']) {
-            if (window.localStorage['innoshipPud'] !== 'null') {
+            // no stored locker (clearStoredPudo leaves innoshipPud '0' and no address) - displaying it threw
+            // on pudoLocation.split / allDataPudo[pudoId] and wrote "Punct de livrare ales: undefined"
+            if (parseInt(window.localStorage['innoshipPud']) > 0 && window.localStorage['innoshipPudAddress'] && window.localStorage['innoshipPudAddress'] !== 'null' && window.localStorage['innoshipPudAddress'] !== 'undefined') {
                 $.ajax({
                     url: window.BASE_URL + "innoshipf/pudo/getmap",
                     type: "POST",
@@ -766,6 +945,10 @@ require([
                     cache: false
                 }).done(function (data) {
                     allDataPudo = data['pudoselected'];
+                    // the customer may have left the Locker method before this answer arrived
+                    if (!$('#tr_method_innoshipcargusgo_1_innoshipcargusgo input[type="radio"]').is(":checked")) {
+                        return;
+                    }
                     displayPudoLocation(window.localStorage['innoshipPud'], window.localStorage['innoshipPudAddress'], false, true);
                 });
             }
@@ -802,8 +985,6 @@ require([
                 var escapedPudoLocation = escapeHtml(pudoLocation);
                 $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom').html('<td class="col col-pudo-message" colspan="4"><b>' + $.mage.__('Shipping point selected') + '</b> ' + pudoDescription + " <br/><b>" + $.mage.__('Address:') + "</b> " + escapedPudoLocation + '</td>');
 
-                let pudoLocationAr = pudoLocation.split(", ");
-
                 // IMPORTANT: When locker is selected, billing and shipping must be different
                 // Uncheck "billing-address-same-as-shipping" checkbox
                 if ($('#billing-address-same-as-shipping').length) {
@@ -826,39 +1007,24 @@ require([
                     }
                 }
 
-                if (!customer.isLoggedIn()) {
-                    if (allDataPudo[pudoId]['countryCode'] === "RO") {
-                        fillShippingAddressInformation(pudoLocationAr);
-                    } else if (allDataPudo[pudoId] && allDataPudo[pudoId]['countryCode'] !== undefined && allDataPudo[pudoId]['countryCode'] !== "RO") {
-                        if ($('div[name="shippingAddress.country_id"]').is(":hidden")) {
-                            showShippingAddressInformation();
-                            $('div[name="shippingAddress.country_id"]').find('select').val(allDataPudo[pudoId]['countryCode']);
-                            $('div[name="shippingAddress.country_id"]').find('select').trigger('change');
-                        }
-                    } else if ($('div[name="shippingAddress.country_id"]').find('select').val() === "RO") {
-                        fillShippingAddressInformation(pudoLocationAr);
-                    }
+                // One path for guest and logged-in. The old code ran the fill only for a logged-in
+                // customer whose customerData 'customer' section reported no addresses — a section
+                // that never carries an addresses key at all (Magento\Customer\CustomerData\Customer
+                // returns fullname, firstname, websiteId), so that branch never decided what it was
+                // written to decide, and a customer with saved addresses kept their own address on
+                // the shipping form.
+                fillShippingAddressInformation(pudoId);
 
-                    // debug Address information selected by easybox
-                    // $('div[name="shippingAddress.country_id"]').show();
-                    // $('div[name="shippingAddress.city"]').show();
-                    // $('div[name="shippingAddress.street.0"]').closest('.street').show();
-                    // $('div[name="shippingAddress.postcode"]').show();
-                    // $('div[name="shippingAddress.region_id"]').show();
+                // debug Address information selected by easybox
+                // $('div[name="shippingAddress.country_id"]').show();
+                // $('div[name="shippingAddress.city"]').show();
+                // $('div[name="shippingAddress.street.0"]').closest('.street').show();
+                // $('div[name="shippingAddress.postcode"]').show();
+                // $('div[name="shippingAddress.region_id"]').show();
 
-                } else {
-                    var customerExtraInfo = customerData.get('customer')();
-
-                    // Check if customer is logged in
-                    if (customerExtraInfo && customerExtraInfo.firstname) {
-                        var addresses = customerExtraInfo.addresses;
-                        if (!addresses || addresses.length <= 0) {
-                            fillShippingAddressInformation(pudoLocationAr);
-                        }
-                    }
-
+                if (customer.isLoggedIn()) {
                     $('#checkout-step-shipping').find('.field.addresses').hide();
-                    $('#checkout-step-shipping').find('.new-address-popup').hide();
+                    helpers.newAddressControls(false);
                     $('#shipping').find('.step-title').hide();
                     $('#shipping').find('.checkout-billing-address').find('.step-title').show();
                 }
@@ -866,15 +1032,20 @@ require([
                 $('#label_carrier_innoshipcargusgo_1_innoshipcargusgopudom').show();
 
                 if (parseInt(window.localStorage['innoshipPud']) > 0) {
-                    $('.checkout-billing-address .fieldset').show();
+                    // form vs saved card: billing-address-mixin (KO visible binding), not a jQuery show()
                     $('.billing-address-same-as-shipping-block').hide();
+                    helpers.selectSavedBillingAddress();
                 }
             }
         }
     }
 
+    /**
+     * Store the selected locker on the quote. Returns the request so callers can wait for the
+     * locker to be stored before triggering a shipping-information save.
+     */
     function setPudoValue() {
-        $.ajax({
+        return $.ajax({
             url: window.BASE_URL + "innoshipf/pudo/setpudo",
             type: "POST",
             data: {
@@ -884,7 +1055,6 @@ require([
                 form_key: $.mage.cookies.get('form_key')
             },
             cache: false
-        }).done(function (data) {
         });
     }
 
@@ -898,13 +1068,21 @@ require([
     function clearStoredPudo() {
         // Nothing to clear if no locker was ever selected
         var current = window.localStorage['innoshipPud'];
-        if (typeof current === 'undefined' || current === null || current === '' || parseInt(current) <= 0) {
+        // !(> 0), not <= 0: a "null" string (setMarkerPudo(null) on plain checkout) parses to NaN, passed this check
+        // and overwrote the remembered locker with "null" (#B2-7)
+        if (typeof current === 'undefined' || current === null || current === '' || !(parseInt(current, 10) > 0)) {
             // Still reset the local UI state in case description lingered
             window.localStorage['innoshipPud'] = '0';
             window.localStorage.removeItem('innoshipPudAddress');
             window.localStorage.removeItem('innoshipPudDescription');
             return;
         }
+
+        // Remember the pick: going back to Locker in this visit restores it (checkout/favorite-locker.js)
+        // before the customer's favourite.
+        window.localStorage['innoshipLastPud'] = current;
+        window.localStorage['innoshipLastPudAddress'] = window.localStorage['innoshipPudAddress'] || '';
+        window.localStorage['innoshipLastPudDescription'] = window.localStorage['innoshipPudDescription'] || '';
 
         window.localStorage['innoshipPud'] = '0';
         window.localStorage.removeItem('innoshipPudAddress');
@@ -937,9 +1115,12 @@ require([
             let escapedCourierName = escapeHtml(window.localStorage['innoshipCourierSelectedName']);
             let courierMessage = '<div class="courier-selected-message"><b>' + $.mage.__('Selected courier:') + '</b> ' + escapedCourierName;
 
+            // The server charges the price it quoted (Model/CourierPriceStore), so show that one
+            let shownPrice = data && data.price !== null && data.price !== undefined ? data.price : courierPrice;
+
             // Add price if available
-            if (courierPrice !== null && courierPrice !== undefined && courierPrice !== '') {
-                courierMessage += ' - ' + courierPrice + ' ' + quote.totals().quote_currency_code;
+            if (shownPrice !== null && shownPrice !== undefined && shownPrice !== '') {
+                courierMessage += ' - ' + escapeHtml(shownPrice) + ' ' + quote.totals().quote_currency_code;
             }
             courierMessage += '</div>';
 
@@ -948,14 +1129,79 @@ require([
             // Recalculate shipping totals
             if (!$('#checkout').hasClass('am-checkout')) {
                 cartCache.set('totals', null);
-                defaultTotal.estimateTotals();
+                // loadFromServer() posts _.pick(address, ...): with no address the totals are priced for an empty one
+                defaultTotal.estimateTotals(quote.shippingAddress());
+            } else {
+                // Amasty: the quote on the server already holds the courier price; read the totals
+                // back (no re-estimate) so the sidebar shows what the order will charge.
+                require(['Magento_Checkout/js/action/get-totals'], function (getTotalsAction) {
+                    getTotalsAction([]);
+                });
             }
         });
     }
 
-    function showCourierList() {
+    /**
+     * Curier row price: showCourierList() puts a "..." placeholder there and nothing rendered a price back.
+     * Show the picked courier's price (the one Setcourierid charges) when the list on screen is priced for
+     * this address, the Curier rate otherwise. Not the quote totals: the core checkout keeps their
+     * shipping_amount at 0 until the shipping-information save.
+     */
+    function showCurierRowPrice() {
+        let method = quote.shippingMethod();
+        let address = quote.shippingAddress();
+        let picked = allDataList ? allDataList[window.localStorage['innoshipCourierSelected']] : null;
+        let price = window.checkoutConfig.isDisplayShippingPriceExclTax ? method && method.price_excl_tax
+            : method && method.price_incl_tax;
 
-        setTimeout(function () {
+        if (!method || method.carrier_code + '_' + method.method_code !== 'innoship_1') {
+            return;
+        }
+        if (picked && typeof picked === 'object' && picked.price !== null && picked.price !== undefined
+            && address && courierListLocation(address.countryId, address.regionId, address.city) === lastCourierListLocation
+        ) {
+            price = picked.price;
+        }
+        if (price === null || price === undefined || price === '') {
+            return;
+        }
+        $('#tr_method_1_innoship').find('.col-price .price')
+            .text(priceUtils.formatPrice(price, quote.getPriceFormat()));
+    }
+
+    /**
+     * The address a courier list is priced for: country + county + city, as Model\CourierPriceStore::locationKey().
+     * The county matters on its own: Ineu, Arad and Ineu, Bihor have different prices.
+     */
+    function courierListLocation(countryCode, regionId, city) {
+        return (countryCode || '') + '|' + (parseInt(regionId, 10) || 0) + '|' + $.trim(city || '').toLowerCase();
+    }
+
+    function showCourierList() {
+        // Three triggers (method change, row re-render, .fake-click) can fire for one selection.
+        if (Date.now() - lastCourierListRequest < 1000) {
+            // ...but an address change inside that second (the quote leaving a locker's county right
+            // after the list was asked for) must still get its own list: retry once after the window.
+            if (!courierListRetryTimer) {
+                courierListRetryTimer = setTimeout(function () {
+                    let address = quote.shippingAddress();
+                    let method = quote.shippingMethod();
+
+                    courierListRetryTimer = null;
+                    if (address && method && method.carrier_code + '_' + method.method_code === 'innoship_1'
+                        && courierListLocation(address.countryId, address.regionId, address.city)
+                        !== lastCourierListLocation
+                    ) {
+                        showCourierList();
+                    }
+                }, 1000 - (Date.now() - lastCourierListRequest));
+            }
+
+            return;
+        }
+        lastCourierListRequest = Date.now();
+
+        let pricePlaceholderTimer = setTimeout(function () {
             // Show loading indicator on shipping method price
             let $priceElement = $('#tr_method_1_innoship').find('.col-price .price');
             if ($priceElement.length === 0) {
@@ -979,7 +1225,13 @@ require([
         let shippingAddress = quote.shippingAddress();
         let countryCode = shippingAddress ? shippingAddress.countryId : null;
         let region = shippingAddress ? shippingAddress.region : null;
+        let regionId = shippingAddress ? shippingAddress.regionId : null;
         let city = shippingAddress ? shippingAddress.city : null;
+
+        // Fallback: region id from the form, read with the region name below
+        if (!regionId) {
+            regionId = $('div[name="shippingAddress.region_id"]').find('select').val() || null;
+        }
 
         // Fallback: get country from form if not available in quote
         if (!countryCode) {
@@ -1020,6 +1272,15 @@ require([
             }
         }
 
+        let listLocation = courierListLocation(countryCode, regionId, city);
+        // a courier picked for another locality is dropped server-side (ShippingInformationManagement
+        // plugin, Model\Carrier): do not show it checked in the new list
+        if (lastCourierListLocation !== '' && listLocation !== lastCourierListLocation) {
+            window.localStorage.removeItem('innoshipCourierSelected');
+            window.localStorage.removeItem('innoshipCourierSelectedName');
+        }
+        lastCourierListLocation = listLocation;
+
         $.ajax({
             url: window.BASE_URL + "innoshipf/courier/listcouriers",
             type: "POST",
@@ -1029,13 +1290,42 @@ require([
                 storeId: window.checkout.storeId,
                 country: countryCode,
                 region: region,
+                // Setcourierid keeps this price only for this county (Model\CourierPriceStore::locationKey)
+                region_id: regionId,
                 city: city
             },
             cache: false
         }).done(function (data) {
-            let checkedSelected;
             allDataList = data['json_data'];
-            let courierCount = Object.keys(allDataList).length;
+            let courierCount = paintCourierList();
+
+            // If only one courier, auto-select it and update shipping price
+            if (courierCount === 1) {
+                let firstCourierId = Object.keys(allDataList)[0];
+                let firstCourier = allDataList[firstCourierId];
+                let courierName = typeof firstCourier === 'object' ? firstCourier.name : firstCourier;
+                let courierPrice = typeof firstCourier === 'object' ? firstCourier.price : null;
+
+                // Store selection
+                window.localStorage['innoshipCourierSelected'] = firstCourierId;
+                window.localStorage['innoshipCourierSelectedName'] = courierName;
+
+                // Update shipping price via AJAX
+                updateShippingPriceWithCourier(firstCourierId, courierPrice);
+            }
+        }).always(function () {
+            // replace the "..." placeholder (or stop it from being set after a fast answer)
+            clearTimeout(pricePlaceholderTimer);
+            showCurierRowPrice();
+        });
+    }
+
+    /**
+     * Draw the last courier list (allDataList) into the Curier row. Returns the number of couriers.
+     */
+    function paintCourierList() {
+            let checkedSelected;
+            let courierCount = Object.keys(allDataList || {}).length;
             htmlDataListCouriers = '<div class="courierList-innoship"><ul>';
 
             $.each(allDataList, function (i, item) {
@@ -1072,21 +1362,35 @@ require([
             // SECURITY: Data already escaped in loop above, safe to insert
             $('#label_carrier_1_innoshippudom td').html(htmlDataListCouriers);
 
-            // If only one courier, auto-select it and update shipping price
-            if (courierCount === 1) {
-                let firstCourierId = Object.keys(allDataList)[0];
-                let firstCourier = allDataList[firstCourierId];
-                let courierName = typeof firstCourier === 'object' ? firstCourier.name : firstCourier;
-                let courierPrice = typeof firstCourier === 'object' ? firstCourier.price : null;
+            return courierCount;
+    }
 
-                // Store selection
-                window.localStorage['innoshipCourierSelected'] = firstCourierId;
-                window.localStorage['innoshipCourierSelectedName'] = courierName;
+    /**
+     * The shipping-method rows were re-rendered (every rates estimate replaces them, and the new Curier
+     * row comes back empty and hidden). Put the courier list back: the cached one when it was priced for
+     * this locality, a new request otherwise. Curier selected, list on, shipping step only.
+     */
+    function restoreCourierListAfterRender() {
+        let method = quote.shippingMethod();
+        let address = quote.shippingAddress();
 
-                // Update shipping price via AJAX
-                updateShippingPriceWithCourier(firstCourierId, courierPrice);
-            }
-        });
+        if (!method || method.carrier_code + '_' + method.method_code !== 'innoship_1'
+            || parseInt($('#showcourierlist').val()) !== 1
+            || !($('#checkout-step-shipping').length === 0 || $('#checkout-step-shipping').is(':visible'))
+            || !address || !address.city || $('#label_carrier_1_innoshippudom').length === 0
+            || $('#label_carrier_1_innoshippudom .courierList-innoship').length > 0
+        ) {
+            return;
+        }
+        if (allDataList && Object.keys(allDataList).length > 0
+            && courierListLocation(address.countryId, address.regionId, address.city) === lastCourierListLocation
+        ) {
+            paintCourierList();
+            return;
+        }
+        $('#label_carrier_1_innoshippudom').show();
+        $('#label_carrier_1_innoshippudom td').html('Loading...');
+        showCourierList();
     }
 
     function hideCourierList() {
@@ -1140,7 +1444,9 @@ require([
 
                 // Re-initialize map to ensure layers are fresh (as requested to fix blocking issues)
                 // We capture the current state, destroy, and recreate.
-                ignoreMoveEvent = true; // Prevent loop from initialization moveend
+                // No ignoreMoveEvent here: the new map's setView fires its moveend synchronously, before
+                // initializeMap() attaches the handler, so a flag set here was never consumed and swallowed
+                // the customer's next pan (lockers past the old 5 km stayed unloaded until a second pan).
                 initializeMap(lat, lng, map.getZoom());
 
                 // Add new markers based on radius search
@@ -1154,7 +1460,8 @@ require([
                         pudoData.addressText,
                         pudoData.localityName,
                         pudoData.countyName,
-                        pudoData.courierId
+                        pudoData.courierId,
+                        pudoData.postalCode
                     ]);
                 });
 
@@ -1171,10 +1478,14 @@ require([
 
                     let marker = new L.marker([locations[i][1], locations[i][2]], {
                         key: locations[i][3],
-                        pudoLocation: locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6],
-                        icon: iconDisplayMapShow
+                        // street, city, county, postcode - the order fillShippingAddressInformation() reads
+                        pudoLocation: String(locations[i][4]).replace(/,/g, ' ') + ', ' + locations[i][5] + ', ' + locations[i][6] + ', ' + locations[i][8],
+                        icon: iconDisplayMapShow,
+                        // #M1: a tap focuses the icon, and the focus pan's moveend reloaded the map, dropping the popup
+                        autoPanOnFocus: false
                     })
-                        .bindPopup(locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6])
+                        // Leaflet renders popup content as HTML: escape the API's locker name/address.
+                        .bindPopup(escapeHtml(locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6]))
                         .addTo(map)
                         .on("click", function (e) {
                             setMarkerPudo(e['sourceTarget']['options']['key'], e['sourceTarget']['options']['pudoLocation'], true);
@@ -1226,7 +1537,8 @@ require([
         } else {
             window.localStorage['innoshipPud'] = pudoId;
             window.localStorage['innoshipPudAddress'] = pudoLocation;
-            if (allDataPudo) {
+            // the locker may be missing from allDataPudo - read it only when present
+            if (allDataPudo && allDataPudo[pudoId]) {
                 window.localStorage['innoshipPudDescription'] = allDataPudo[pudoId]['infoShow'];
             }
 
@@ -1330,9 +1642,12 @@ require([
                 marker = new L.marker([locations[i][1], locations[i][2]], {
                     key: locations[i][3],
                     pudoLocation: locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6],
-                    icon: iconDisplayMapShow
+                    icon: iconDisplayMapShow,
+                    // #M1: a tap focuses the icon, and the focus pan's moveend reloaded the map, dropping the popup
+                    autoPanOnFocus: false
                 })
-                    .bindPopup(locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6])
+                    // Leaflet renders popup content as HTML: escape the API's locker name/address.
+                    .bindPopup(escapeHtml(locations[i][0] + ', ' + locations[i][4] + ', ' + locations[i][5] + ', ' + locations[i][6]))
                     .addTo(map)
                     .on("click", function (e) {
                         setMarkerPudo(e['sourceTarget']['options']['key'], e['sourceTarget']['options']['pudoLocation'], true);
@@ -1342,7 +1657,12 @@ require([
         }, 300);
 
         showSearch();
-        cleanSearch();
+        // a late locker reload for the same city kept wiping what the customer had typed - re-filter it instead
+        if ($.trim($('#searchpudovalue').val()) !== '') {
+            $('#searchpudovalue').trigger('keyup');
+        } else {
+            cleanSearch();
+        }
     }
 
     function showCourierListPudo(courierList) {
@@ -1353,6 +1673,13 @@ require([
         });
 
         $('#innopudocourierlist').html(dataJsonCourierListExtraIns).show();
+    }
+
+    /**
+     * True when the customer picks from saved address cards (the form sits in the New Address pop-up).
+     */
+    function hasSavedAddressCards() {
+        return customer.isLoggedIn() && $('#checkout-step-shipping .shipping-address-item').length > 0;
     }
 
     function showShippingAddressInformation() {
@@ -1369,55 +1696,158 @@ require([
         $(".billing-address-same-as-shipping-block").show();
     }
 
-    function fillShippingAddressInformation(pudoLocationAr) {
-        setTimeout(function () {
-            $('div[name="shippingAddress.country_id"]').find('select').val('RO').trigger('change');
-            $('div[name="shippingAddress.country_id"]').hide();
+    /**
+     * Lowercase a name and strip Romanian diacritics and every non-alphanumeric character.
+     */
+    function foldName(value) {
+        let map = {
+            'Ă': 'a', 'ă': 'a', 'Â': 'a', 'â': 'a', 'Î': 'i', 'î': 'i',
+            'Ș': 's', 'ș': 's', 'Ş': 's', 'ş': 's',
+            'Ț': 't', 'ț': 't', 'Ţ': 't', 'ţ': 't'
+        };
 
-            let judetList = $('div[name="shippingAddress.region_id"]').find('select');
-            let judetSingle = '';
-            let judetSingleVal = '';
-            let judetSelectat = pudoLocationAr[2];
-            judetList.find('option').each(function () {
-                if ($(this).data('title')) {
-                    judetSingle = cleanString($(this).data('title'));
-                } else {
-                    judetSingle = '';
-                }
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/[ĂăÂâÎîȘșŞşȚțŢţ]/g, function (character) {
+                return map[character];
+            })
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    }
 
-                if (judetSingle.length > 2) {
-                    judetSingleVal = cleanString($(this).val());
-                    if (judetSingle.toLowerCase() === judetSelectat.toLowerCase() || judetSingleVal.toLowerCase() === judetSelectat.toLowerCase()) {
-                        judetList.val(judetSingleVal);
-                        judetList.trigger('change');
-                        $('div[name="shippingAddress.region_id"]').hide();
-                    }
+    /**
+     * Resolve a Magento region from an InnoShip county name, using the directory section data and
+     * falling back to the rendered region select. Returns null when neither knows the county; the
+     * server resolves the region again in that case.
+     */
+    function findRegion(countryId, countyName) {
+        let directory = customerData.get('directory-data')();
+        let needle = foldName(countyName);
+        let found = null;
+
+        if (!needle) {
+            return null;
+        }
+
+        if (countryId && directory && directory[countryId] && directory[countryId].regions) {
+            $.each(directory[countryId].regions, function (regionId, region) {
+                if (foldName(region.name) === needle || foldName(region.code) === needle) {
+                    found = { id: regionId, name: region.name, code: region.code };
+
+                    return false;
                 }
             });
+        }
 
-            $('div[name="shippingAddress.city"]').find('input').val(pudoLocationAr[1]).trigger('change');
+        if (found) {
+            return found;
+        }
+
+        // The directory section may not be loaded yet. Fall back to the rendered region select,
+        // which is what the old code matched against, so a missing section cannot cost us the region.
+        $('div[name="shippingAddress.region_id"]').find('select option').each(function () {
+            let option = $(this);
+            let optionValue = option.val();
+
+            if (!optionValue) {
+                return true;
+            }
+
+            if (foldName(option.data('title')) === needle || foldName(option.text()) === needle) {
+                found = { id: optionValue, name: option.data('title') || option.text(), code: '' };
+
+                return false;
+            }
+        });
+
+        return found;
+    }
+
+    /**
+     * Fill the shipping address form with a locker, reading the fields from the locker record
+     * rather than splitting a comma-joined display string. Three different producers build that
+     * string in three different field orders, and any locker whose addressText itself contains a
+     * comma ("Sos. Pacurari, Nr. 121") shifted every field by one.
+     *
+     * The form stays the client-side source of truth: the checkout rebuilds the quote address from
+     * it, so writing anywhere else would be overwritten on the next form change. The stored address
+     * is guaranteed server-side by InnoShip\InnoShip\Model\PudoAddress, which also clears the
+     * customer_address_id that made Magento re-import the customer's saved address over the locker.
+     */
+    function fillShippingAddressInformation(pudoId) {
+        let pudo = allDataPudo ? allDataPudo[pudoId] : null;
+
+        if (!pudo || !pudo['addressText']) {
+            return;
+        }
+
+        let countryId = pudo['countryCode'] || 'RO';
+
+        setTimeout(function () {
+            let countrySelect = $('div[name="shippingAddress.country_id"]').find('select');
+
+            if (countrySelect.length) {
+                countrySelect.val(countryId).trigger('change');
+            }
+            $('div[name="shippingAddress.country_id"]').hide();
+
+            // Resolved only after the country has been applied: the region select is re-rendered
+            // per country, and the DOM fallback inside findRegion reads those options.
+            let region = findRegion(countryId, pudo['countyName']);
+
+            if (region) {
+                let regionSelect = $('div[name="shippingAddress.region_id"]').find('select');
+
+                if (regionSelect.length) {
+                    regionSelect.val(region.id).trigger('change');
+                }
+                // Hidden only when it holds a resolved value. Hiding an unmatched county would
+                // leave a hidden required field empty and block checkout with no visible error.
+                $('div[name="shippingAddress.region_id"]').hide();
+            }
+
+            $('div[name="shippingAddress.city"]').find('input').val(pudo['localityName']).trigger('change');
             $('div[name="shippingAddress.city"]').hide();
-            $('div[name="shippingAddress.street.0"]').find('input').val(pudoLocationAr[0]).trigger('change');
+            // Some themes render the street as a textarea instead of an input.
+            $('div[name="shippingAddress.street.0"]').find('input, textarea').val(pudo['addressText']).trigger('change');
             $('div[name="shippingAddress.street.0"]').closest('.street').hide();
-            $('div[name="shippingAddress.postcode"]').find('input').val(pudoLocationAr[3]).trigger('change');
+            // Address type (person/company) means nothing for a locker; shown again on leaving Locker.
+            $('div[name="shippingAddress.entity_type"]').hide();
+            $('div[name="shippingAddress.postcode"]').find('input').val(pudo['postalCode']).trigger('change');
             $('div[name="shippingAddress.postcode"]').hide();
 
-            if (customer.isLoggedIn()) {
-                let customerD = customer.customerData.addresses;
-                let phone = '0000000000';
-
-                if (customerD) {
-                    let firstAddress = Object.entries(customerD)[0];
-                    if (firstAddress) {
-                        let firstAddressID = firstAddress[0];
-                        if (firstAddressID) {
-                            phone = customerD[firstAddressID].telephone
-                        }
-                    }
-                }
-                $('div[name="shippingAddress.telephone"]').find('input').val(phone).trigger('change');
-            }
+            fillTelephoneIfEmpty();
         }, 500);
+    }
+
+    /**
+     * A locker has no phone number of its own, so the customer's own number must be kept. Only fill
+     * the field when it is empty; the previous code wrote a literal '0000000000' for every
+     * logged-in customer, which left the courier unable to call them.
+     */
+    function fillTelephoneIfEmpty() {
+        let input = $('div[name="shippingAddress.telephone"]').find('input');
+
+        if (!input.length || $.trim(input.val()) !== '') {
+            return;
+        }
+
+        let current = quote.shippingAddress() || {};
+        let billing = quote.billingAddress() || {};
+        let phone = current.telephone || billing.telephone || '';
+
+        if (!phone && customer.isLoggedIn() && customer.customerData && customer.customerData.addresses) {
+            $.each(customer.customerData.addresses, function (addressId, address) {
+                if (address && address.telephone) {
+                    phone = address.telephone;
+
+                    return false;
+                }
+            });
+        }
+
+        if (phone) {
+            input.val(phone).trigger('change');
+        }
     }
 
     function getGPSCoordinates(priority) {
@@ -1515,6 +1945,12 @@ require([
     function attachMapEvents() {
         if (map) {
             map.off('moveend');
+            // #M1: a popup fitting itself into view fires autopanstart, then panBy, which always ends in one
+            // moveend; skip that reload, or initializeMap() removes the map together with the open popup.
+            map.off('autopanstart');
+            map.on('autopanstart', function () {
+                ignoreMoveEvent = true;
+            });
             map.on('moveend', function () {
                 if (ignoreMoveEvent) {
                     ignoreMoveEvent = false;
@@ -1648,6 +2084,8 @@ require([
             'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; ' + mapLink + ' Contributors',
             maxZoom: 18,
+            // OSM tile servers refuse requests without a referrer (the page's no-referrer policy).
+            referrerPolicy: 'strict-origin-when-cross-origin',
         }).addTo(map);
 
         setTimeout(function () {

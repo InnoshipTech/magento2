@@ -26,6 +26,11 @@ class Service implements ServiceInterface
     /** @var string */
     const API_VERSION_HEADER_KEY = 'api-version';
 
+    /** Seconds. */
+    const CONNECT_TIMEOUT = 10;
+    const REQUEST_TIMEOUT = 120;
+    const DOWNLOAD_TIMEOUT = 900;
+
     /** @var Logger */
     protected $logger;
 
@@ -90,9 +95,12 @@ class Service implements ServiceInterface
 
             $this->getInnoShipHeaders();
 
+            // Guzzle waits forever by default: a hung InnoShip API used to hang checkout rate collection.
             $data = [
-                RequestOptions::HEADERS => $this->headers,
-                RequestOptions::JSON    => $body,
+                RequestOptions::HEADERS         => $this->headers,
+                RequestOptions::JSON            => $body,
+                RequestOptions::CONNECT_TIMEOUT => self::CONNECT_TIMEOUT,
+                RequestOptions::TIMEOUT         => self::REQUEST_TIMEOUT,
             ];
 
             // Save to file the body of response
@@ -154,6 +162,58 @@ class Service implements ServiceInterface
         $this->logRequestResponse($url, $body, $response);
 
         return $response;
+    }
+
+    /**
+     * GET a large answer straight into a file. The body is never read into PHP and never logged: the
+     * locker list (~445k entries) decoded at once needed ~3.5 GB.
+     *
+     * @param string $url
+     * @param string $sinkPath
+     *
+     * @return array success, status_code, status_message
+     */
+    public function download(string $url, string $sinkPath): array
+    {
+        $result = [
+            'success' => false,
+        ];
+
+        try {
+            if (is_null($this->config->getGatewayUrl())) {
+                throw new ApiEndPointException("Invalid API EndPoint!");
+            }
+
+            if (!$this->isValidApiUrl($url)) {
+                throw new ApiEndPointException("Invalid API URL format!");
+            }
+
+            $this->getInnoShipHeaders();
+
+            // http_errors (Guzzle default) turns a 4xx/5xx answer into a BadResponseException
+            $response = $this->client->request(self::GET, $this->config->getGatewayUrl() . $url, [
+                RequestOptions::HEADERS         => $this->headers,
+                RequestOptions::SINK            => $sinkPath,
+                RequestOptions::CONNECT_TIMEOUT => self::CONNECT_TIMEOUT,
+                RequestOptions::TIMEOUT         => self::DOWNLOAD_TIMEOUT,
+            ]);
+
+            $result['success']        = true;
+            $result['status_code']    = $response->getStatusCode();
+            $result['status_message'] = $response->getReasonPhrase();
+        } catch (BadResponseException $exception) {
+            $this->logger->error('Bad Response: ' . $exception->getMessage());
+            $result['status_code']    = $exception->getCode();
+            $result['status_message'] = $exception->getMessage();
+        } catch (\Exception $exception) {
+            $this->logger->error('Exception: ' . $exception->getMessage());
+            $result['status_code']    = $exception->getCode();
+            $result['status_message'] = $exception->getMessage();
+        }
+
+        $this->logRequestResponse($url, [], $result);
+
+        return $result;
     }
 
     /**

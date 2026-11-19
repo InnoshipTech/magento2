@@ -40,7 +40,7 @@ class EmailCode
             foreach($allRows as $courierValue){
                 $pudoSelected['name'] = $courierValue['name'];
                 $pudoSelected['addressText'] = $courierValue['addressText'];
-                $pudoSelected['courierName'] = $courierNames[$courierValue['courierId']];
+                $pudoSelected['courierName'] = $courierNames[$courierValue['courierId']] ?? null;
             }
 
             $vars['formattedShippingAddress'] = '';

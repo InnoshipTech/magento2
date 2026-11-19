@@ -8,7 +8,7 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Quote\Model\MaskedQuoteIdToQuoteIdInterface;
+use InnoShip\InnoShip\Model\SessionQuoteId;
 use InnoShip\InnoShip\Model\Config;
 use Psr\Log\LoggerInterface;
 
@@ -17,7 +17,7 @@ class Getmap extends Action
     private $_resourceConnection;
     private $resultJsonFactory;
     public $quoteRepository;
-    private $maskedQuoteIdToQuoteId;
+    private $sessionQuoteId;
     protected $config;
     protected $logger;
 
@@ -26,14 +26,14 @@ class Getmap extends Action
         ResourceConnection $resourceConnection,
         JsonFactory $resultJsonFactory,
         CartRepositoryInterface $quoteRepository,
-        MaskedQuoteIdToQuoteIdInterface $maskedQuoteIdToQuoteId,
+        SessionQuoteId $sessionQuoteId,
         Config $config,
         LoggerInterface $logger
     ) {
         $this->_resourceConnection = $resourceConnection;
         $this->resultJsonFactory = $resultJsonFactory;
         $this->quoteRepository = $quoteRepository;
-        $this->maskedQuoteIdToQuoteId = $maskedQuoteIdToQuoteId;
+        $this->sessionQuoteId = $sessionQuoteId;
         $this->config = $config;
         $this->logger = $logger;
         parent::__construct($context);
@@ -151,10 +151,12 @@ class Getmap extends Action
         }
 
         if ($quoteId) {
-            try {
-                $quoteIdNr = $this->maskedQuoteIdToQuoteId->execute($quoteId);
-            } catch (\Exception $exception) {
-                $quoteIdNr = $quoteId;
+            // Only the visitor's own quote (checkout session).
+            $quoteIdNr = $this->sessionQuoteId->resolve($quoteId);
+            if ($quoteIdNr === null) {
+                return $resultJson->setData([
+                    'error' => __('Unable to load map. Please try again.')
+                ]);
             }
 
             try {
@@ -207,7 +209,9 @@ class Getmap extends Action
             }
 
             $tableNameCourierList = $this->_resourceConnection->getTableName('innoship_courierlist');
-            $courierNameListQuery = $connection->query("select * from " . $tableNameCourierList . " order by courierName");
+            $courierNameListQuery = $connection->fetchAll(
+                $connection->select()->from($tableNameCourierList)->order('courierName')
+            );
             foreach ($courierNameListQuery as $itemCourierNameItem) {
                 $courierNames[$itemCourierNameItem['courierId']] = $itemCourierNameItem['courierName'];
             }
@@ -265,26 +269,30 @@ class Getmap extends Action
             ]);
 
             $tableNameCourierList = $this->_resourceConnection->getTableName('innoship_courierlist');
-            $courierNameListQuery = $connection->query("select * from " . $tableNameCourierList . " order by courierName");
+            $courierNameListQuery = $connection->fetchAll(
+                $connection->select()->from($tableNameCourierList)->order('courierName')
+            );
             foreach ($courierNameListQuery as $itemCourierNameItem) {
                 $courierNames[$itemCourierNameItem['courierId']] = $itemCourierNameItem['courierName'];
             }
 
             // Calculate distance using Haversine formula in SQL
             // Radius of Earth in km is 6371
-            $lat = (float) $latParameter;
-            $lng = (float) $lngParameter;
-            $radius = (float) $radiusParameter;
+            // Bound, never interpolated into the SQL (emulated prepares allow the repeated :lat/:lng).
+            $radiusBind = [
+                'lat' => (float) $latParameter,
+                'lng' => (float) $lngParameter,
+                'radius' => (float) $radiusParameter,
+            ];
+            $distanceCondition = '(6371 * acos(cos(radians(:lat)) * cos(radians(latitude)) * cos(radians(longitude) - radians(:lng))'
+                . ' + sin(radians(:lat)) * sin(radians(latitude)))) <= :radius';
 
             $result = $connection->select()
                 ->from($table)
                 ->where('isActive = 1')
                 ->where('latitude != 0.000000')
                 ->where("supportedPaymentType IN ('Card, Cash', 'Cash', 'Card')")
-                ->where(
-                    "(6371 * acos(cos(radians($lat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($lng)) + sin(radians($lat)) * sin(radians(latitude)))) <= ?",
-                    $radius
-                );
+                ->where($distanceCondition);
 
             if ($selectedCourier) {
                 $conditions = [];
@@ -303,7 +311,7 @@ class Getmap extends Action
 
             $this->logger->info('InnoShip Getmap: SQL Query', ['query' => $result->__toString()]);
 
-            $allRows = $connection->fetchAll($result);
+            $allRows = $connection->fetchAll($result, $radiusBind);
 
             $this->logger->info('InnoShip Getmap: Found lockers in radius', ['count' => count($allRows)]);
 
@@ -324,12 +332,9 @@ class Getmap extends Action
                 ->where('isActive = 1')
                 ->where('latitude != 0.000000')
                 ->where("supportedPaymentType IN ('Card, Cash', 'Cash', 'Card')")
-                ->where(
-                    "(6371 * acos(cos(radians($lat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($lng)) + sin(radians($lat)) * sin(radians(latitude)))) <= ?",
-                    $radius
-                );
+                ->where($distanceCondition);
 
-            $allRowsCourier = $connection->fetchAll($resultCouriers);
+            $allRowsCourier = $connection->fetchAll($resultCouriers, $radiusBind);
 
             foreach ($allRowsCourier as $courierValue) {
                 if (!empty($courierValue['brandId'])) {
@@ -342,18 +347,32 @@ class Getmap extends Action
 
         if ($pudoSelectedParameter) {
             $tableNameCourierList = $this->_resourceConnection->getTableName('innoship_courierlist');
-            $courierNameListQuery = $connection->query("select * from " . $tableNameCourierList);
+            $courierNameListQuery = $connection->fetchAll($connection->select()->from($tableNameCourierList));
             foreach ($courierNameListQuery as $itemCourierNameItem) {
                 $courierNames[$itemCourierNameItem['courierId']] = $itemCourierNameItem['courierName'];
             }
 
-            $result = $connection->select()->from($table, array("name", "courierId", "brandId"))->where('pudo_id = :pudoSelectedParameter');
+            // Select the whole locker row instead of name/courierId/brandId. The checkout JS
+            // assigns allDataPudo = data['pudoselected'] on the favourite-locker path and on the
+            // page-reload path, and then reads the locker's address fields off it to fill the
+            // shipping form. With only 'infoShow' present those paths had no address to work with
+            // and fell back to splitting a comma-joined display string, which shifts every field
+            // by one whenever addressText itself contains a comma.
+            $result = $connection->select()->from($table)->where('pudo_id = :pudoSelectedParameter');
             $bind = ['pudoSelectedParameter' => $pudoSelectedParameter];
             $allRows = $connection->fetchAll($result, $bind);
 
-            foreach ($allRows as $courierValue) {
-                $courierLabel = !empty($courierValue['brandId']) ? ucfirst($courierValue['brandId']) : ($courierNames[$courierValue['courierId']] ?? '');
-                $pudoSelected[$pudoSelectedParameter]['infoShow'] = $courierValue['name'] . "<br/><b>Curier:</b> " . $courierLabel;
+            foreach ($allRows as $pudoValue) {
+                $courierLabel = !empty($pudoValue['brandId'])
+                    ? ucfirst($pudoValue['brandId'])
+                    : ($courierNames[$pudoValue['courierId']] ?? '');
+                $pudoValue['infoShow'] = $pudoValue['name'];
+
+                if ($courierLabel !== '') {
+                    $pudoValue['infoShow'] .= "<br/><b>Curier:</b> " . $courierLabel;
+                }
+
+                $pudoSelected[$pudoSelectedParameter] = $pudoValue;
             }
         }
 

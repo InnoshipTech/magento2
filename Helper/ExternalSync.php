@@ -114,15 +114,30 @@ class ExternalSync extends AbstractHelper
             $apiKey = $this->config->getApiKey();
             $externalIdList = $this->getExternalIdFromInnoship($apiKey);
 
-            // Truncate table before syncing to ensure only current data remains
-            $this->truncateExternalTable();
+            // Validate the whole answer BEFORE touching the table: an error body or an empty list
+            // used to truncate every stored location and insert nothing.
+            $validLocations = array_values(array_filter(
+                $externalIdList,
+                fn ($externalIdObj) => is_array($externalIdObj) && $this->validateExternalLocationData($externalIdObj)
+            ));
+            if (empty($validLocations)) {
+                $this->logger->error('InnoShip external locations: no valid location in the API answer; stored locations kept.');
+                return [
+                    'success' => false,
+                    'error' => __('The InnoShip API returned no valid external location; nothing was changed.')->render()
+                ];
+            }
 
             $syncedCount = 0;
             $errorCount = 0;
 
-            foreach ($externalIdList as $externalIdObj) {
-                // SECURITY: Validate external location data before insertion
-                if ($this->validateExternalLocationData($externalIdObj)) {
+            $connection = $this->externalResource->getConnection();
+            $connection->beginTransaction();
+            try {
+                // Replace only current data; DELETE (not TRUNCATE) so a failure rolls back.
+                $this->truncateExternalTable();
+
+                foreach ($validLocations as $externalIdObj) {
                     try {
                         $this->saveExternalLocation(
                             $externalIdObj['externalLocationId'],
@@ -135,6 +150,14 @@ class ExternalSync extends AbstractHelper
                         $errorCount++;
                     }
                 }
+
+                if ($syncedCount === 0) {
+                    throw new \RuntimeException('no external location could be saved');
+                }
+                $connection->commit();
+            } catch (\Throwable $e) {
+                $connection->rollBack();
+                throw $e;
             }
 
             return [
@@ -143,7 +166,7 @@ class ExternalSync extends AbstractHelper
                 'errors' => $errorCount,
                 'total' => count($externalIdList)
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->error('Error synchronizing external locations: ' . $e->getMessage());
             return [
                 'success' => false,
@@ -162,7 +185,8 @@ class ExternalSync extends AbstractHelper
     {
         $connection = $this->externalResource->getConnection();
         $tableName = $this->externalResource->getMainTable();
-        $connection->truncateTable($tableName);
+        // DELETE instead of TRUNCATE: TRUNCATE commits implicitly and cannot be rolled back.
+        $connection->delete($tableName);
     }
 
     /**
@@ -173,18 +197,28 @@ class ExternalSync extends AbstractHelper
      */
     protected function getExternalIdFromInnoship($apiKey)
     {
-        $url = "https://api.innoship.com/api/Location/ClientLocations";
+        $url = $this->config->getApiBaseUrl() . "/api/Location/ClientLocations";
         $curl = curl_init($url);
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, Config::CURL_CONNECT_TIMEOUT);
+        curl_setopt($curl, CURLOPT_TIMEOUT, Config::CURL_TIMEOUT);
         $headers = [
             "X-Api-Key: " . $apiKey,
         ];
         curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         $resp = curl_exec($curl);
-        curl_close($curl);
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
-        return json_decode($resp, true) ?: [];
+        if (!is_string($resp) || $httpCode !== 200) {
+            $this->logger->error('InnoShip external locations: API answered HTTP ' . $httpCode);
+            return [];
+        }
+
+        $list = json_decode($resp, true);
+
+        // A list of locations only; an error object ({"message": ...}) is not one.
+        return is_array($list) && array_is_list($list) ? $list : [];
     }
 
     /**

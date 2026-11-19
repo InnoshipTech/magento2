@@ -38,4 +38,16 @@ class GetPudo
     {
         return $this->service->makeRequest('/api/Location/FixedLocations?ShowInactive=false', $data, ServiceInterface::GET);
     }
+
+    /**
+     * Download the locker list (a JSON array) into a file without decoding it.
+     *
+     * @param string $path
+     *
+     * @return array success, status_code, status_message
+     */
+    public function downloadPudoList(string $path): array
+    {
+        return $this->service->download('/api/Location/FixedLocations?ShowInactive=false', $path);
+    }
 }

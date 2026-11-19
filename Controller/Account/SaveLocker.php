@@ -71,7 +71,7 @@ class SaveLocker extends Action implements HttpPostActionInterface, CsrfAwareAct
 
         // Check if customer is logged in
         if (!$this->customerSession->isLoggedIn()) {
-            return $result->setData(['success' => false, 'message' => 'Customer not logged in']);
+            return $result->setHttpResponseCode(401)->setData(['success' => false, 'message' => 'Customer not logged in']);
         }
 
         // Get the logged-in customer ID from session (secure)
@@ -83,11 +83,11 @@ class SaveLocker extends Action implements HttpPostActionInterface, CsrfAwareAct
 
         // SECURITY FIX: Validate that the customer can only modify their own data
         if ($requestCustomerId !== $loggedInCustomerId) {
-            return $result->setData(['success' => false, 'message' => 'Unauthorized access']);
+            return $result->setHttpResponseCode(403)->setData(['success' => false, 'message' => 'Unauthorized access']);
         }
 
         if (!$loggedInCustomerId || !$storeId) {
-            return $result->setData(['success' => false, 'message' => 'Customer ID and Store ID are required']);
+            return $result->setHttpResponseCode(400)->setData(['success' => false, 'message' => 'Customer ID and Store ID are required']);
         }
 
         // INPUT VALIDATION
@@ -96,22 +96,22 @@ class SaveLocker extends Action implements HttpPostActionInterface, CsrfAwareAct
 
         // 1. Validate locker ID
         if (empty($lockerId)) {
-            return $result->setData(['success' => false, 'message' => 'Locker ID is required']);
+            return $result->setHttpResponseCode(400)->setData(['success' => false, 'message' => 'Locker ID is required']);
         }
 
         if (!is_numeric($lockerId) || $lockerId <= 0) {
-            return $result->setData(['success' => false, 'message' => 'Invalid locker ID']);
+            return $result->setHttpResponseCode(400)->setData(['success' => false, 'message' => 'Invalid locker ID']);
         }
         $lockerId = (int)$lockerId;
 
         // 2. Validate locker name
         if (empty($lockerName)) {
-            return $result->setData(['success' => false, 'message' => 'Locker name is required']);
+            return $result->setHttpResponseCode(400)->setData(['success' => false, 'message' => 'Locker name is required']);
         }
 
         // 3. Validate locker name length
         if (strlen($lockerName) > 255) {
-            return $result->setData(['success' => false, 'message' => 'Locker name is too long']);
+            return $result->setHttpResponseCode(400)->setData(['success' => false, 'message' => 'Locker name is too long']);
         }
 
         // 4. Sanitize locker name (remove any HTML/JavaScript to prevent XSS)
@@ -129,9 +129,9 @@ class SaveLocker extends Action implements HttpPostActionInterface, CsrfAwareAct
 
             return $result->setData(['success' => true]);
         } catch (NoSuchEntityException $e) {
-            return $result->setData(['success' => false, 'message' => 'Customer not found']);
+            return $result->setHttpResponseCode(404)->setData(['success' => false, 'message' => 'Customer not found']);
         } catch (\Exception $e) {
-            return $result->setData(['success' => false, 'message' => 'Unable to save preference']);
+            return $result->setHttpResponseCode(500)->setData(['success' => false, 'message' => 'Unable to save preference']);
         }
     }
 }

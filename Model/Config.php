@@ -16,6 +16,13 @@ class Config
     const XML_PATH = 'carriers/innoship/';
     const XML_PATH_GO = 'carriers/innoshipcargusgo/';
 
+    /** Fallback when gateway_url is empty (the only host Backend\GatewayUrl accepts). */
+    const DEFAULT_GATEWAY_URL = 'https://api.innoship.io';
+
+    /** Seconds; the curl imports (postal codes per country) can take long, a dead host must not hang a cron. */
+    const CURL_CONNECT_TIMEOUT = 10;
+    const CURL_TIMEOUT = 300;
+
     /** @var ScopeConfigInterface */
     protected $config;
 
@@ -388,6 +395,66 @@ class Config
     {
         $value = $this->getValue('multiplicator', $storeId);
         return $value !== null ? (float)$value : null;
+    }
+
+    /**
+     * Gateway URL without a trailing slash, for building API endpoints.
+     *
+     * @param int|null $storeId
+     *
+     * @return string
+     */
+    public function getApiBaseUrl(?int $storeId = null): string
+    {
+        $url = rtrim(trim((string) $this->getValue('gateway_url', $storeId)), '/');
+
+        return $url !== '' ? $url : self::DEFAULT_GATEWAY_URL;
+    }
+
+    /**
+     * AWB "sourceChannel" for the order's store view; empty = the default "eCommerce".
+     *
+     * @param int|null $storeId
+     *
+     * @return string
+     */
+    public function getSourceChannel(?int $storeId = null): string
+    {
+        return trim((string) $this->getValue('source_channel', $storeId));
+    }
+
+    /**
+     * @param int|null $storeId
+     *
+     * @return bool
+     */
+    public function isCompleteAfterAwb(?int $storeId = null): bool
+    {
+        return (bool) (int) $this->getValue('complete_after_awb', $storeId);
+    }
+
+    /**
+     * Payment methods allowed with Curier (innoship_1); empty = no restriction.
+     *
+     * @param int|null $storeId
+     *
+     * @return string|null
+     */
+    public function getPaymentRestrictionCourier(?int $storeId = null): ?string
+    {
+        return $this->getValue('innoship_courier_payment_restriction', $storeId);
+    }
+
+    /**
+     * Product attribute code that allows a product in a locker (Yes/No); empty = no check.
+     *
+     * @param int|null $storeId
+     *
+     * @return string
+     */
+    public function getProductForLocker(?int $storeId = null): string
+    {
+        return trim((string) $this->getValueGo('product_for_locker', $storeId));
     }
 
     /**

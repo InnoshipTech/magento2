@@ -6,6 +6,7 @@ use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Block\Adminhtml\Order\View as OrderView;
 use Magento\Framework\UrlInterface;
+use Magento\Framework\View\LayoutInterface;
 use InnoShip\InnoShip\Model\Carrier;
 use InnoShip\InnoShip\Model\Config;
 
@@ -48,10 +49,11 @@ class View
     }
 
     /**
-     * @param OrderView $view
+     * @param OrderView       $view
+     * @param LayoutInterface $layout
      */
 
-    public function beforeSetLayout(OrderView $view)
+    public function beforeSetLayout(OrderView $view, LayoutInterface $layout)
     {
         $order       = $view->getOrder();
 

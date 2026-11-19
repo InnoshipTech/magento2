@@ -51,7 +51,8 @@
     position: relative;
 }
 
-#innoshipshowmapb{
+/* :where() keeps the locker buttons at zero specificity, so a theme can restyle them with a plain selector */
+:where(#innoshipshowmapb){
     background: #dbe2da;
     padding: 5px;
     text-align: center;
@@ -59,8 +60,7 @@
     z-index: 100;
     position: relative;
 }
-#innoshipcargusalegeconf,
-#innoshipsalveazafavorit{
+:where(#innoshipcargusalegeconf, #innoshipsalveazafavorit){
     background: #dbe2da;
     padding: 5px;
     text-align: center;

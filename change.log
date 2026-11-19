@@ -1,5 +1,109 @@
 # Changelog Innoship
 
+## [1.4.0]
+    - Security
+        - Security hardening of the storefront courier and locker endpoints (setcourierid, listcouriers, setpudo, getpudo, getmap)
+        - Curier: the method row shows the charged shipping amount instead of a "..." placeholder that was never replaced
+        - My Account address edit: the InnoShip city select loads for the saved county (it stayed empty until the county was changed)
+        - Curier: the courier list is fetched again when the shipping address moves to another locality (it stayed empty after a county/city change)
+        - Locker map: the first pan after a radius reload loads the lockers around the new centre (it was swallowed by a move flag set during the map re-init)
+        - Locker map: a marker clicked within ~5 s of choosing Locker no longer applies the locker on its own and closes the map before Confirm (the stored-locker poll took the marker's pick for a saved one)
+        - Locker map: "Alege" clicked ~2.5 s after choosing Locker again opens the map (the method-row re-render rebuilt the open panel as a hidden copy)
+        - City import (Latvia): an INNOSHIP county named without " novads" now fills the Magento region "<name> novads" (40 of 42 LV counties instead of 11); a county that matches a region exactly is never reused for another one
+        - Guest order view ("Orders and Returns") shows the InnoShip delivery block like My Account's order view
+        - A chosen courier's price is charged only while the shipping address keeps the locality it was quoted for: a changed city, or leaving Curier, drops it (the old city's price used to be charged with no courier shown)
+        - Standard Magento checkout: a shipping-method change saves the billing address once instead of once per payment method; the parallel saves recreated the shipping address and dropped the picked courier, so the Curier default price was charged
+        - Curier row price shows the picked courier's price, or the Curier rate before a pick (it read 0,00 on the standard checkout until Next)
+        - Totals re-estimate after a courier or locker pick sends the shipping address (it was sent empty)
+        - Payment step "Ship To" for a locker shows the locker name and courier as text instead of escaped HTML tags
+    - Data
+        - `innoship:regioimport` updates a country's regions in place (matched by name, then code) instead of deleting and re-inserting them: region ids stay stable, so saved customer/quote/order addresses keep a valid region (re-import used to break place-order with "Invalid value ... regionId"); other locales' region names are no longer deleted
+        - Locker import writes in batches and cleans up with a hash lookup: it never finished on the full list (~445k lockers)
+        - Locker import no longer deletes every stored locker when the InnoShip API request fails or returns no lockers
+        - Locker import streams the list: downloaded to var/tmp and read one locker at a time (`Model/Api/JsonArrayReader`) instead of decoded at once (peaked at ~3.5 GB, over the 2 GB CLI limit); a truncated download deletes nothing
+        - Locker closing hours imported from `closingHour` (were a copy of the opening hour); a locker without address no longer aborts the import
+        - Locker shipping: an empty payment restriction no longer removes every payment method; the restriction is read for the quote's store
+        - Security hardening of the Locker and Curier payment restrictions (`Model/PaymentRestriction`)
+        - Security hardening of the carrier configuration
+    - Locker address on the quote
+        - Locker address applied server-side (`Model/PudoAddress`) from setpudo, shipping-information and a `ShippingAddressManagement::assign()` plugin; a customer's saved address is no longer re-imported over the locker
+        - Locker address no longer saved into the customer's address book: the quote address also gets the quote's `customer_id`
+        - setpudo writes only the `quote_address` columns the module owns instead of saving the whole quote; a late setpudo no longer blanks the address shipping-information saved (place-order "street/city/telephone is required")
+        - Locker fill reads the locker record (street, city, county, postcode) instead of a comma-separated string read in the wrong order
+        - Phone `0000000000` no longer written for logged-in customers; an empty phone is filled from the customer's address
+        - Locker confirm waits for setpudo before saving shipping information
+    - Checkout locker UI
+        - `favorite_locker` = 0 no longer loads a locker (TypeError "reading 'infoShow'" on every checkout load)
+        - Stored locker without an id or address no longer shown as "undefined"
+        - Locker search matches a term at the start of a name and no longer treats it as a regex
+        - getmap answer arriving after the customer left Locker no longer shows/fills the locker on Curier
+        - A late locker list reload keeps the typed search term
+        - Favourite locker restored (localStorage and quote) when a rates reload passes through a non-locker method
+        - Amasty checkout: a method change before the checkout messages component exists (slow first load) waits for it instead of throwing "Cannot read properties of undefined (reading 'messageContainer')"; reloading with Locker already saved no longer re-saves before the guest e-mail form exists (jquery.validate "reading 'form'" TypeError)
+        - Amasty checkout: the shipping save on a method change copies the form into the quote first (a phone typed last was lost and Place Order stayed disabled); a customer's saved-address pop-up is no longer blanked; the courier list also loads on the method change
+        - Leaving Locker restores the address a guest typed and the "same as shipping" tick, re-selects the saved address card a customer had chosen, and shows the address cards / step title / billing block on the same click, also without Amasty
+        - Logged-in customer without saved addresses: Curier click no longer blanks the inline address
+        - `checkout.js` loaded with `defer` (leaflet.js / uiRegistry.js 404 when it ran before requirejs-config.js)
+        - Locker button styles no longer use id specificity
+    - City / postcode
+        - Billing and shipping keep separate city lists (billing postcode looked up in the shipping county)
+        - getcity and the postcode change events no longer fire outside the shipping step (could drop the order during place order)
+        - City select writes to the form fields only, not onto the selected quote address
+        - City import fills postcode 0 (cities with street-level postcodes) with the lowest pickup-point postcode of the same locality; data patch `FillCityPostcodes` fills existing rows
+    - Other
+        - Favourite-locker save answers with an error HTTP status when it fails
+        - `customer_account_index.xml` no longer forces `1column` on the account dashboard
+        - `Carriergo::getAllowedMethods()` keyed by the rate method code (`innoshipcargusgo_1`)
+        - `etc/config.xml` defaults for payment (Sender), repayment (Bank), saturday delivery, open package, insurance, free shipping, automatic price, courier list (0) and label format (A4): a fresh install returned null from the typed `Model\Config` getters (TypeError in `innoship:api:test` and the AWB form) until the section was saved
+    - New settings (defaults keep the previous behaviour)
+        - Curier: "AWB Source Channel" (store view) - sent as the AWB source channel, empty = eCommerce
+        - Curier: "Mark Order Complete after AWB" (website, default No)
+        - Curier: "Allow Payment Methods" - payment methods offered with Curier, none selected = all
+        - Locker: "Product Attribute Allowed in Locker" - a cart product whose Yes/No attribute is No hides the Locker; read with one product collection load (was one product load per cart item, which failed for a SKU no longer in the catalog)
+        - GraphQL `storeConfig { innoship_handling_fee innoship_locker_handling_fee }`
+    - Checkout
+        - A locker order without a picked locker is refused at place order (storefront and Web API; admin order creation is not gated)
+        - Curier: the Select button and courier list appear on the first, uncached checkout visit (the method row inside a newly rendered table was not detected)
+        - Locker → Curier → Locker gives back the locker picked earlier in the visit, before the favourite
+        - Reloading checkout with Locker selected shows the locker stored on the quote again ("Shipping point selected" stayed empty; `checkoutConfig.innoshipSelectedLocker`), before the favourite; also on plain checkout before Next (method not yet saved on the quote)
+        - Plain checkout: Locker → Curier → Locker keeps the earlier locker (a "null" locker id overwrote the remembered one); the favourite locker no longer selects a billing address before the shipping address exists (core billing-address.js TypeError)
+        - Leaving Locker after a billing address was updated there ticks "same as shipping" again once the customer's saved address is back (also when one Curier click sets the method twice; billing is saved again even for the address used before Locker)
+        - Leaving Locker never falls back to an old locker address saved in the address book by earlier versions (`checkoutConfig.innoshipLockerAddressIds`)
+        - Locker: a logged-in customer without a chosen billing card gets the default billing address (else the first saved one) selected; a typed billing address is kept
+        - Locker fill also writes a street textarea and hides the address type field
+        - Locker map popups: security hardening; map tiles requested with a referrer (OSM refused them)
+        - Locker map: the popup of a marker near the map edge stays open (the pan that brought it into view reloaded the lockers and rebuilt the map, closing it after ~1.5 s)
+        - Billing city select also works in `.billing-address-form` checkouts; security hardening of the city options
+        - Shipping method rows with an error message no longer render the price cell (as core)
+        - Locker validator accepts every locker id > 0
+        - Curier courier prices are kept per country, county and city: a locality name found in two counties (Ineu, Arad / Ineu, Bihor) after a Locker detour no longer charges the other county's price (an order was charged 0); the list is requested again when only the county changes (`listcouriers` sends `region_id`)
+        - Amasty Checkout: the shipping step's "New Address" button is hidden with the address cards while a locker is chosen
+        - Amasty Checkout: a phone typed after the locker was confirmed is saved before Place Order (Amasty skips its auto-save while the billing form is open; inert without Amasty or with it disabled)
+        - Curier: free shipping also applies to a courier picked in checkout — the country free-shipping threshold, the module threshold and the cart price rule "Free Shipping" flag are checked after the picked courier's price (they were skipped, so the courier price was charged above the threshold)
+        - Curier: the country free-shipping threshold now also wins over the "Automatic price" API rate (the API rate used to overwrite the 0)
+    - Admin / orders
+        - `Awb/Save`: security hardening
+        - AWB generation works with the Inventory (MSI) modules disabled
+        - AWB for a courier outside the built-in list of 10 (e.g. Dragon Star) gets its tracking number in Magento: the courier name is read from `innoship_courierlist`, then the built-in list, then "Courier ID <n>" (an "Undefined array key" after the AWB was created at InnoShip left the order without tracking)
+        - Order/Shipment view plugins accept the layout argument; order e-mail no longer warns for an unknown courier id
+        - The order observer saves only the order shipping address, once, and only when the locker/courier changed (a full order save inside `sales_order_save_after` re-ran every order-save observer)
+        - `innoship:dataimport` and the carrier region lookup no longer use the ObjectManager directly
+    - Data / API
+        - External locations sync validates the API answer before replacing the stored locations, in one transaction (an error answer emptied the table)
+        - City import replaces a region's cities in a transaction and keeps them when the answer is missing or malformed
+        - Every InnoShip API call has a connect and total timeout; the curl imports use the configured gateway URL
+        - `Awb/Download`: security hardening; the served file is never deleted; a file in a subdirectory is found again (the path lost its separator: "innoship/" + "awb.pdf" read "innoshipawb.pdf")
+        - AWB label print: a failed InnoShip label request shows the error instead of downloading an empty or broken PDF
+        - City import no longer skips regions whose code is longer than 10 characters (RO Bistrita-Nasaud, Caras-Severin, most PL/FI/LV regions had no cities)
+        - City import keeps the locality's lowest street postcode within its most common 2-digit prefix (a stray code such as Bistrita 042020 never wins) instead of the first street's, so a city's postcode no longer changes with the InnoShip API's street order (Cluj-Napoca 400001 had become 400496)
+        - `innoship:externalid` no longer says it truncates the table before the answer is validated
+        - Locker map (`pudo/getmap`): security hardening
+        - `db_schema_whitelist.json` added; index `INNOSHIP_PUDO_COUNTRY_POSTCODE` on `innoship_pudo` (countryCode, postalCode)
+    - Compatibility with Magento 2.4.9
+    - Compatibility with PHP 8.5
+    - Important
+        - After update run bin/magento setup:upgrade, setup:di:compile (constructors changed: `Cron\Citylist`, `Console\Regioimport`, `Console\Initialimport`, `Model\Carriergo`, `Observer\AddPudoFieldValue`, `Controller\Adminhtml\Awb\Create`, `Model\Table` and the Pudo/Courier controllers), setup:static-content:deploy and cache:flush
+
 ## [1.3.11]
     - Fix city import skipping every county whose name contains diacritics (`innoship:dataimport`)
         - `Citylist::matchCounty()` compared the diacritic-stripped Magento region name against the raw InnoShip `countyNameLocalized`, so counties written with comma-below characters never matched

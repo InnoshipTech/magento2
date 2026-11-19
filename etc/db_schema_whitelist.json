@@ -1,0 +1,102 @@
+{
+    "sales_shipment_track": {
+        "column": {
+            "innoship_data": true
+        }
+    },
+    "innoship_pudo": {
+        "column": {
+            "id": true,
+            "pudo_id": true,
+            "name": true,
+            "fixedLocationTypeId": true,
+            "serviceId": true,
+            "courierId": true,
+            "localityId": true,
+            "localityName": true,
+            "countyName": true,
+            "countryCode": true,
+            "addressText": true,
+            "postalCode": true,
+            "longitude": true,
+            "latitude": true,
+            "isActive": true,
+            "email": true,
+            "phone": true,
+            "supportedPaymentType": true,
+            "brandId": true,
+            "open_hours_mo_start": true,
+            "open_hours_mo_end": true,
+            "open_hours_tu_start": true,
+            "open_hours_tu_end": true,
+            "open_hours_we_start": true,
+            "open_hours_we_end": true,
+            "open_hours_th_start": true,
+            "open_hours_th_end": true,
+            "open_hours_fr_start": true,
+            "open_hours_fr_end": true,
+            "open_hours_sa_start": true,
+            "open_hours_sa_end": true,
+            "open_hours_su_start": true,
+            "open_hours_su_end": true
+        },
+        "index": {
+            "INNOSHIP_PUDO_COUNTY_CODE": true,
+            "INNOSHIP_PUDO_SERVICEID": true,
+            "INNOSHIP_PUDO_LOCALITY_ID": true,
+            "INNOSHIP_PUDO_COURIER_ID": true,
+            "INNOSHIP_PUDO_COUNTRY_POSTCODE": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "INNOSHIP_PUDO_PUDO_ID": true
+        }
+    },
+    "innoship_courierlist": {
+        "column": {
+            "id": true,
+            "courierId": true,
+            "courierName": true,
+            "country": true
+        },
+        "index": {
+            "INNOSHIP_COURIERLIST_COUNTRY": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "INNOSHIP_COURIERLIST_COURIER_COUNTRY": true
+        }
+    },
+    "innoship_citys": {
+        "column": {
+            "id": true,
+            "country": true,
+            "regioId": true,
+            "regioCode": true,
+            "localitate": true,
+            "codPostal": true
+        },
+        "index": {
+            "INNOSHIP_REGIO_ID": true,
+            "INNOSHIP_REGIO_CODE": true,
+            "INNOSHIP_COUNTRY_CODE": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    },
+    "quote_address": {
+        "column": {
+            "innoship_pudo_id": true,
+            "innoship_courier_id": true,
+            "innoship_shipping_price": true
+        }
+    },
+    "sales_order_address": {
+        "column": {
+            "innoship_pudo_id": true,
+            "innoship_courier_id": true,
+            "innoship_shipping_price": true
+        }
+    }
+}

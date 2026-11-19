@@ -2,6 +2,7 @@
 
 namespace InnoShip\InnoShip\Model;
 
+use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Directory\Helper\Data;
 use Magento\Directory\Model\CountryFactory;
@@ -64,6 +65,9 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
 
     protected $productRepository;
 
+    /** @var ProductCollectionFactory */
+    private $productCollectionFactory;
+
     /** @var Json */
     protected $serializer;
 
@@ -113,6 +117,7 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
         Json $jsonSerializer,
         DataObjectFactory $dataObjectFactory,
         Config\Source\Methodgo $method,
+        ProductCollectionFactory $productCollectionFactory,
         array $data = [],
         ?ProxyDeferredFactory $proxyDeferredFactory = null
     ) {
@@ -142,6 +147,7 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
         $this->serializer           = $jsonSerializer;
         $this->method               = $method;
         $this->productRepository    = $productRepository;
+        $this->productCollectionFactory = $productCollectionFactory;
 
     }
 
@@ -217,7 +223,9 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
         foreach ($allowed as $k) {
             foreach ($this->method->toOptionArray() as $option) {
                 if ($option['value'] == $k) {
-                    $methods[$k] = $option['label'];
+                    // Keyed by the rate's method code (collectRates() sets "innoshipcargusgo_<value>"),
+                    // so a carrier/method picker builds a code that a rate actually has.
+                    $methods[$this->_code . '_' . $k] = $option['label'];
                 }
             }
         }
@@ -355,14 +363,35 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
             $attrLungime = $this->getConfigData('lungime', $storeId);
             $attrLatime = $this->getConfigData('latime', $storeId);
             $attrInaltime = $this->getConfigData('inaltime', $storeId);
+            $productForLocker = trim((string) $this->getConfigData('product_for_locker', $storeId));
 
             $skuList = array();
             foreach($items as $item){
                 $skuList[$item->getSku()] = $item->getQty();
             }
 
+            // One collection load for every cart SKU (was productRepository->get() per item, which
+            // threw NoSuchEntityException for a SKU no longer in the catalog).
+            $products = $this->loadProductsBySku(
+                array_keys($skuList),
+                [(string) $attrLungime, (string) $attrLatime, (string) $attrInaltime, $productForLocker],
+                (int) $storeId
+            );
+
             foreach($skuList as $sku => $qty){
-                $product = $this->productRepository->get($sku);
+                if (!isset($products[(string) $sku])) {
+                    continue;
+                }
+                $product = $products[(string) $sku];
+
+                // A cart product whose "allowed in locker" attribute is set to No hides the locker.
+                if ($productForLocker !== ''
+                    && $product->getData($productForLocker) !== null
+                    && $product->getData($productForLocker) !== ''
+                    && (int) $product->getData($productForLocker) === 0
+                ) {
+                    return $result;
+                }
 
                 $lungimeTmp     = (float)$product->getData((string)$attrLungime);
                 $latimeTmp      = (float)$product->getData((string)$attrLatime);
@@ -425,6 +454,33 @@ class Carriergo extends AbstractCarrierOnline implements CarrierInterface
         $result->append($rate);
 
         return $result;
+    }
+
+    /**
+     * @param string[] $skus
+     * @param string[] $attributeCodes
+     * @param int      $storeId
+     *
+     * @return \Magento\Catalog\Model\Product[] keyed by SKU
+     */
+    private function loadProductsBySku(array $skus, array $attributeCodes, int $storeId): array
+    {
+        $skus = array_values(array_filter(array_map('strval', $skus), 'strlen'));
+        if (empty($skus)) {
+            return [];
+        }
+
+        $collection = $this->productCollectionFactory->create();
+        $collection->setStoreId($storeId);
+        $collection->addAttributeToSelect(array_values(array_unique(array_filter($attributeCodes, 'strlen'))));
+        $collection->addAttributeToFilter('sku', ['in' => $skus]);
+
+        $products = [];
+        foreach ($collection as $product) {
+            $products[(string) $product->getSku()] = $product;
+        }
+
+        return $products;
     }
 
     /**

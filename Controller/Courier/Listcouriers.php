@@ -8,7 +8,8 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Quote\Model\MaskedQuoteIdToQuoteIdInterface;
+use InnoShip\InnoShip\Model\CourierPriceStore;
+use InnoShip\InnoShip\Model\SessionQuoteId;
 use InnoShip\InnoShip\Model\Config;
 use InnoShip\InnoShip\Api\ServiceInterface;
 use InnoShip\InnoShip\Model\Api\Rest\Service;
@@ -21,7 +22,8 @@ class Listcouriers extends Action
     private $_resourceConnection;
     private $resultJsonFactory;
     public $quoteRepository;
-    private $maskedQuoteIdToQuoteId;
+    private $sessionQuoteId;
+    private $courierPriceStore;
     protected $config;
     protected $service;
     protected $externalCollectionFactory;
@@ -32,17 +34,19 @@ class Listcouriers extends Action
         ResourceConnection $resourceConnection,
         JsonFactory $resultJsonFactory,
         CartRepositoryInterface $quoteRepository,
-        MaskedQuoteIdToQuoteIdInterface $maskedQuoteIdToQuoteId,
+        SessionQuoteId $sessionQuoteId,
         Config $config,
         Service $service,
         ExternalCollectionFactory $externalCollectionFactory,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        CourierPriceStore $courierPriceStore
     )
     {
         $this->_resourceConnection = $resourceConnection;
         $this->resultJsonFactory = $resultJsonFactory;
         $this->quoteRepository = $quoteRepository;
-        $this->maskedQuoteIdToQuoteId = $maskedQuoteIdToQuoteId;
+        $this->sessionQuoteId = $sessionQuoteId;
+        $this->courierPriceStore = $courierPriceStore;
         $this->config = $config;
         $this->service = $service;
         $this->externalCollectionFactory = $externalCollectionFactory;
@@ -102,10 +106,13 @@ class Listcouriers extends Action
             $cityParam = htmlspecialchars($cityParam, ENT_QUOTES, 'UTF-8');
         }
 
-        try {
-            $quoteIdNr = $this->maskedQuoteIdToQuoteId->execute($quoteId);
-        } catch (\Exception $exception) {
-            $quoteIdNr = $quoteId;
+        // Only the visitor's own quote (checkout session).
+        $quoteIdNr = $this->sessionQuoteId->resolve($quoteId);
+        if ($quoteIdNr === null) {
+            return $resultJson->setData([
+                'error' => __('Quote ID is required.'),
+                'json_data' => []
+            ]);
         }
 
         $connection = $this->_resourceConnection->getConnection();
@@ -211,6 +218,21 @@ class Listcouriers extends Action
                 ];
             }
         }
+
+        // Setcourierid charges the price quoted here, never one sent back by the browser.
+        // ...and only while the address stays the one priced here (raw params: the shipping-information
+        // save it is compared with carries the unescaped city).
+        $this->courierPriceStore->save(
+            $quoteIdNr,
+            $allCourier,
+            $this->courierPriceStore->locationKey(
+                (string) ($countryCode ?: ($shippingCountry ?? '')),
+                // the county too: without region_id (an older checkout.js) the key matches no
+                // saved address, so the price is dropped and the carrier rate applies
+                (int) $this->getRequest()->getParam('region_id'),
+                (string) $this->getRequest()->getParam('city')
+            )
+        );
 
         return $resultJson->setData(['json_data' => $allCourier]);
     }

@@ -18,6 +18,7 @@ use Magento\Sales\Api\Data\ShipmentInterface;
 use Magento\Sales\Api\Data\ShipmentTrackExtensionFactory;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Api\ShipmentRepositoryInterface;
+use Magento\Sales\Model\Order as SalesOrder;
 use Magento\Sales\Model\Order\Shipment\Comment;
 use Magento\Sales\Model\Order\Shipment\TrackFactory;
 use Magento\Sales\Model\Order\Shipment\Track;
@@ -33,6 +34,8 @@ use InnoShip\InnoShip\Helper\ExternalSync;
 
 class Save extends Action
 {
+    const ADMIN_RESOURCE = 'InnoShip_InnoShip::awb';
+
     /** @var Manager */
     protected $manager;
 
@@ -204,16 +207,15 @@ class Save extends Action
             $data['declared_value'] = $declaredValue;
         }
 
-        // 7. Validate external_id if present
-        if (isset($data['external_id'])) {
-            $externalId = trim($data['external_id']);
-            // Allow only alphanumeric, dash, and underscore
-            if (!preg_match('/^[A-Za-z0-9_-]+$/', $externalId) || strlen($externalId) > 100) {
-                $this->manager->addErrorMessage(__('Invalid external location ID format.'));
-                return $resultRedirect->setPath('innoship/awb/create', ['shipment_id' => $shipmentId]);
-            }
-            $data['external_id'] = $externalId;
+        // 7. Validate externalid (the field the AWB form posts; prepareRequest() sends it to the API)
+        $externalId = isset($data['externalid']) && is_string($data['externalid']) ? trim($data['externalid']) : '';
+        // Allow only alphanumeric, dash, and underscore
+        if (!preg_match('/^[A-Za-z0-9_-]+$/', $externalId) || strlen($externalId) > 100) {
+            $this->manager->addErrorMessage(__('Invalid external location ID format.'));
+            $this->session->setFormData($data);
+            return $resultRedirect->setPath('innoship/awb/create', ['shipment_id' => $shipmentId]);
         }
+        $data['externalid'] = $externalId;
 
         // 8. Validate packages array if present
         if (isset($data['packages']) && is_array($data['packages'])) {
@@ -284,6 +286,8 @@ class Save extends Action
 
             $this->manager->addSuccess(__('The AWB has been created successfully!'));
 
+            $this->completeOrderAfterAwb($order);
+
             $this->session->setFormData(false);
 
             return $resultRedirect->setPath('adminhtml/order_shipment/view', ['shipment_id' => $shipmentId]);
@@ -293,6 +297,43 @@ class Save extends Action
             $this->session->setFormData($data);
 
             return $resultRedirect->setPath('innoship/awb/create', ['shipment_id' => $shipmentId]);
+        }
+    }
+
+    /**
+     * "Mark order complete after AWB" (website scope, default No): the AWB is already saved, so a
+     * failure here only warns.
+     *
+     * @param OrderInterface $order
+     */
+    private function completeOrderAfterAwb(OrderInterface $order): void
+    {
+        if (!$this->config->isCompleteAfterAwb((int) $order->getStoreId())) {
+            return;
+        }
+
+        if (!$order instanceof SalesOrder
+            || in_array(
+                $order->getState(),
+                [
+                    SalesOrder::STATE_COMPLETE,
+                    SalesOrder::STATE_CLOSED,
+                    SalesOrder::STATE_CANCELED,
+                ],
+                true
+            )
+        ) {
+            return;
+        }
+
+        try {
+            $order->setState(SalesOrder::STATE_COMPLETE);
+            $order->setStatus($order->getConfig()->getStateDefaultStatus(SalesOrder::STATE_COMPLETE));
+            $this->orderRepositoryInterface->save($order);
+        } catch (\Throwable $e) {
+            $this->manager->addWarningMessage(
+                __('The AWB was created, but the order could not be marked complete: %1', $e->getMessage())
+            );
         }
     }
 
@@ -530,7 +571,7 @@ class Save extends Action
             ],
             'externalClientLocation' => $externaleID,
             'externalOrderId'        => $order->getIncrementId(),
-            'sourceChannel'          => 'eCommerce',
+            'sourceChannel'          => $this->config->getSourceChannel((int) $order->getStoreId()) ?: 'eCommerce',
             'content'                => [
                 'envelopeCount' => $data['envelope_count'],
                 'parcelsCount'  => $data['parcel_count'],

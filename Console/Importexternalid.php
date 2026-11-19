@@ -78,7 +78,7 @@ class Importexternalid extends Command
         }
 
         $output->writeln("<info>Starting external ID synchronization...</info>");
-        $output->writeln("<comment>Truncating existing external locations table...</comment>");
+        $output->writeln("<comment>Fetching external locations; stored ones are replaced only by a valid answer...</comment>");
 
         // Synchronize external locations to database
         $result = $this->externalSync->synchronizeExternalLocations();
@@ -127,16 +127,21 @@ class Importexternalid extends Command
      */
     private function getExternalIdInnoship($apiKey)
     {
-        $url = "https://api.innoship.com/api/Location/ClientLocations";
+        $url = $this->config->getApiBaseUrl() . "/api/Location/ClientLocations";
         $curl = curl_init($url);
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, Config::CURL_CONNECT_TIMEOUT);
+        curl_setopt($curl, CURLOPT_TIMEOUT, Config::CURL_TIMEOUT);
         $headers = [
             "X-Api-Key: " . $apiKey,
         ];
         curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         $resp = curl_exec($curl);
-        curl_close($curl);
-        return json_decode($resp, true) ?: [];
+        if (!is_string($resp)) {
+            return [];
+        }
+        $list = json_decode($resp, true);
+        return is_array($list) && array_is_list($list) ? $list : [];
     }
 }

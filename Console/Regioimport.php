@@ -10,6 +10,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\App\State;
 use Magento\Framework\Filesystem\DirectoryList;
+use InnoShip\InnoShip\Model\CityPostcodeFiller;
 use InnoShip\InnoShip\Model\Config;
 
 class Regioimport extends Command
@@ -43,10 +44,16 @@ class Regioimport extends Command
     protected $backupDir;
 
     /**
+     * @var CityPostcodeFiller
+     */
+    private $cityPostcodeFiller;
+
+    /**
      * @param ResourceConnection $resourceConnection
      * @param Config $config
      * @param State $state
      * @param DirectoryList $directoryList
+     * @param CityPostcodeFiller $cityPostcodeFiller
      * @param string|null $name
      */
     public function __construct(
@@ -54,12 +61,14 @@ class Regioimport extends Command
         Config $config,
         State $state,
         DirectoryList $directoryList,
+        CityPostcodeFiller $cityPostcodeFiller,
         ?string $name = null,
     ) {
         $this->resourceConnection = $resourceConnection;
         $this->config = $config;
         $this->state = $state;
         $this->directoryList = $directoryList;
+        $this->cityPostcodeFiller = $cityPostcodeFiller;
         $this->backupDir = $this->directoryList->getRoot() . '/app/code/InnoShip/InnoShip/RegionBackup';
         parent::__construct($name);
     }
@@ -194,46 +203,31 @@ class Regioimport extends Command
         $counties = $apiData['counties'];
         $output->writeln("<info>Found " . count($counties) . " counties/regions in API response</info>");
 
-        // Step 3: Delete existing data for this country
-        $output->writeln("<info>Deleting existing regions for {$countryCode}...</info>");
-
-        // Get region IDs to delete from region_name table
-        $existingRegions = $connection->fetchAll(
-            "SELECT region_id FROM {$tableRegion} WHERE country_id = ?",
+        // Step 3: Update regions in place. Deleting and re-inserting them gave every region a new
+        // region_id, and every customer, quote and order address of the country (and any tax rate)
+        // kept pointing at the deleted ids: place-order then failed with "Invalid value ... regionId".
+        // Existing regions are matched by diacritic-folded name, then by code, and keep their id;
+        // only regions not present yet are inserted, nothing is deleted.
+        $existingByName = [];
+        $existingByCode = [];
+        $existingCodeById = [];
+        foreach ($connection->fetchAll(
+            "SELECT region_id, code, default_name FROM {$tableRegion} WHERE country_id = ?",
             [$countryCode]
-        );
-
-        if (!empty($existingRegions)) {
-            $regionIds = array_column($existingRegions, 'region_id');
-
-            // SECURITY FIX: Validate all region IDs are integers
-            $validRegionIds = array_filter($regionIds, function($id) {
-                return is_numeric($id) && $id > 0;
-            });
-            $validRegionIds = array_map('intval', $validRegionIds);
-
-            if (!empty($validRegionIds)) {
-                // SECURITY FIX: Use parameterized query with IN clause
-                $placeholders = implode(',', array_fill(0, count($validRegionIds), '?'));
-                $connection->query(
-                    "DELETE FROM {$tableRegionName} WHERE region_id IN ({$placeholders})",
-                    $validRegionIds
-                );
-                $output->writeln("<info>Deleted region names for " . count($validRegionIds) . " regions</info>");
-            }
+        ) as $existing) {
+            $existingByName[$this->foldRegionName((string) $existing['default_name'])] = (int) $existing['region_id'];
+            $existingByCode[strtoupper((string) $existing['code'])] = (int) $existing['region_id'];
+            $existingCodeById[(int) $existing['region_id']] = (string) $existing['code'];
         }
 
-        // Delete from region table
-        $connection->query("DELETE FROM {$tableRegion} WHERE country_id = ?", [$countryCode]);
-        $output->writeln("<info>Deleted regions from directory_country_region</info>");
-
-        // Delete cities
+        // Cities are rebuilt below for each region id
         $connection->query("DELETE FROM {$tableCities} WHERE country = ?", [$countryCode]);
         $output->writeln("<info>Deleted cities from innoship_citys</info>");
 
-        // Step 4: Insert new regions
+        // Step 4: Insert or update regions
         $output->writeln("<info>Importing regions...</info>");
         $insertedRegions = 0;
+        $updatedRegions = 0;
         $insertedCities = 0;
 
         foreach ($counties as $county) {
@@ -248,23 +242,36 @@ class Regioimport extends Command
             // Generate code from countyName (alphanumeric only)
             $code = $this->generateRegionCode($countyName);
 
-            // Insert into directory_country_region
-            $connection->insert($tableRegion, [
-                'country_id' => $countryCode,
-                'code' => $code,
-                'default_name' => $countyNameLocalized
-            ]);
+            $regionId = $existingByName[$this->foldRegionName($countyNameLocalized)]
+                ?? $existingByName[$this->foldRegionName($countyName)]
+                ?? $existingByCode[strtoupper($code)]
+                ?? null;
 
-            $regionId = $connection->lastInsertId();
+            if ($regionId !== null) {
+                // Keep the stored code: it may be referenced by name elsewhere; refresh the name only
+                $connection->update($tableRegion, [
+                    'default_name' => $countyNameLocalized
+                ], ['region_id = ?' => $regionId]);
+                $code = $existingCodeById[$regionId];
+                $updatedRegions++;
+            } else {
+                // Insert into directory_country_region
+                $connection->insert($tableRegion, [
+                    'country_id' => $countryCode,
+                    'code' => $code,
+                    'default_name' => $countyNameLocalized
+                ]);
 
-            // Insert into directory_country_region_name (en_US locale)
-            $connection->insert($tableRegionName, [
+                $regionId = (int) $connection->lastInsertId();
+                $insertedRegions++;
+            }
+
+            // directory_country_region_name (en_US locale); other locales are left as they are
+            $connection->insertOnDuplicate($tableRegionName, [
                 'locale' => 'en_US',
                 'region_id' => $regionId,
                 'name' => $countyNameLocalized
-            ]);
-
-            $insertedRegions++;
+            ], ['name']);
 
             // Insert cities for this region
             // SECURITY FIX: Use insertMultiple with proper data array instead of building raw SQL
@@ -296,12 +303,16 @@ class Regioimport extends Command
                 }
             }
 
-            if ($insertedRegions % 10 === 0) {
-                $output->writeln("<comment>Processed {$insertedRegions} regions...</comment>");
+            if (($insertedRegions + $updatedRegions) % 10 === 0) {
+                $output->writeln("<comment>Processed " . ($insertedRegions + $updatedRegions) . " regions...</comment>");
             }
         }
 
-        $output->writeln("<info>Successfully imported {$insertedRegions} regions and {$insertedCities} cities for {$countryCode}</info>");
+        // Cities with street-level postcodes were stored with postcode 0 above.
+        $filledPostcodes = $this->cityPostcodeFiller->execute();
+        $output->writeln("<info>Filled {$filledPostcodes} city postcodes from pickup points</info>");
+
+        $output->writeln("<info>Successfully imported {$insertedRegions} new and {$updatedRegions} existing regions and {$insertedCities} cities for {$countryCode}</info>");
         $output->writeln("<info>Backup saved to: {$this->backupDir}</info>");
 
         return \Magento\Framework\Console\Cli::RETURN_SUCCESS;
@@ -497,17 +508,37 @@ class Regioimport extends Command
      */
     protected function getAllCountryDetails($countryCode, $apiKey)
     {
-        $url = "https://api.innoship.com/api/Location/Postalcodes/Country/" . strtolower($countryCode);
+        $url = $this->config->getApiBaseUrl() . "/api/Location/Postalcodes/Country/" . strtolower($countryCode);
         $curl = curl_init($url);
         curl_setopt($curl, CURLOPT_URL, $url);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, Config::CURL_CONNECT_TIMEOUT);
+        curl_setopt($curl, CURLOPT_TIMEOUT, Config::CURL_TIMEOUT);
         $headers = [
             "X-Api-Key: " . $apiKey,
         ];
         curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         $resp = curl_exec($curl);
-        curl_close($curl);
+        if (!is_string($resp)) {
+            return [];
+        }
         return json_decode($resp, true) ?: [];
+    }
+
+    /**
+     * Lowercase a region name and strip Romanian diacritics and every non-alphanumeric character
+     *
+     * @param string $name
+     * @return string
+     */
+    private function foldRegionName(string $name): string
+    {
+        $name = strtr($name, [
+            'Ă' => 'a', 'ă' => 'a', 'Â' => 'a', 'â' => 'a', 'Î' => 'i', 'î' => 'i',
+            'Ș' => 's', 'ș' => 's', 'Ş' => 's', 'ş' => 's', 'Ț' => 't', 'ț' => 't', 'Ţ' => 't', 'ţ' => 't',
+        ]);
+
+        return (string) preg_replace('/[^a-z0-9]/', '', mb_strtolower($name, 'UTF-8'));
     }
 
     /**

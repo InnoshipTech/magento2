@@ -7,6 +7,7 @@ use Magento\Backend\App\Action\Context;
 use Magento\Backend\Model\View\Result\Page;
 use Magento\Framework\App\ResponseInterface;
 use Magento\Framework\Controller\ResultInterface;
+use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\Registry;
 use Magento\Framework\View\Result\PageFactory;
 use Magento\Sales\Api\OrderRepositoryInterface;
@@ -57,6 +58,9 @@ class Create extends Action
     /** @var ShipmentRepository */
     protected $shipmentRepository;
 
+    /** @var ModuleManager */
+    private $moduleManager;
+
     /**
      * Add constructor.
      *
@@ -70,6 +74,7 @@ class Create extends Action
      * @param GetSourcesAssignedToStockOrderedByPriorityInterface $getSourcesAssignedToStockOrderedByPriority
      * @param DefaultSourceProviderInterface $defaultSourceProvider
      * @param ShipmentRepository $shipmentRepository
+     * @param ModuleManager $moduleManager
      */
     public function __construct(
         Action\Context $context,
@@ -81,8 +86,10 @@ class Create extends Action
         StockByWebsiteIdResolverInterface $stockByWebsiteIdResolver,
         GetSourcesAssignedToStockOrderedByPriorityInterface $getSourcesAssignedToStockOrderedByPriority,
         DefaultSourceProviderInterface $defaultSourceProvider,
-        ShipmentRepository $shipmentRepository
+        ShipmentRepository $shipmentRepository,
+        ModuleManager $moduleManager
     ) {
+        $this->moduleManager                                = $moduleManager;
         $this->orderRepository                              = $orderRepository;
         $this->coreRegistry                                 = $coreRegistry;
         $this->resultPageFactory                            = $resultPageFactory;
@@ -143,15 +150,18 @@ class Create extends Action
                     $shipment->register();
                     $shipment->getOrder()->setIsInProcess(true);
 
-                    $websiteId = $order->getStore()->getWebsiteId();
-                    $stockId = $this->stockByWebsiteIdResolver->execute((int)$websiteId)->getStockId();
-                    $sources = $this->getSourcesAssignedToStockOrderedByPriority->execute((int)$stockId);
-                    if (!empty($sources) && count($sources) === 1) {
-                        $sourceCode = $sources[0]->getSourceCode();
-                    } else {
-                        $sourceCode = $this->defaultSourceProvider->getCode();
+                    // Source code only exists with MSI; without it the shipment is saved without one.
+                    if ($this->isMsiEnabled()) {
+                        $websiteId = $order->getStore()->getWebsiteId();
+                        $stockId = $this->stockByWebsiteIdResolver->execute((int)$websiteId)->getStockId();
+                        $sources = $this->getSourcesAssignedToStockOrderedByPriority->execute((int)$stockId);
+                        if (!empty($sources) && count($sources) === 1) {
+                            $sourceCode = $sources[0]->getSourceCode();
+                        } else {
+                            $sourceCode = $this->defaultSourceProvider->getCode();
+                        }
+                        $shipment->getExtensionAttributes()->setSourceCode($sourceCode);
                     }
-                    $shipment->getExtensionAttributes()->setSourceCode($sourceCode);
                     try {
                         $shipment->save();
                         $shipment->getOrder()->save();
@@ -182,5 +192,16 @@ class Create extends Action
 
             return $resultPage;
         }
+    }
+
+    /**
+     * @return bool
+     */
+    private function isMsiEnabled(): bool
+    {
+        return $this->moduleManager->isEnabled('Magento_InventorySalesApi')
+            && $this->moduleManager->isEnabled('Magento_InventoryApi')
+            && $this->moduleManager->isEnabled('Magento_InventoryCatalogApi')
+            && $this->moduleManager->isEnabled('Magento_InventoryShipping');
     }
 }

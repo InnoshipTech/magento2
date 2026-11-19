@@ -147,6 +147,9 @@ class Label extends Action
         $html = '';
 
         foreach ($shipment->getTracks() as $track) {
+            // Set before the request: after it the loop either returns the PDF or continues on an error,
+            // so "No AWBs found!" used to follow every label error.
+            $hasTracks = true;
             try {
                 /** @var \Magento\Framework\DataObject $innoShipData */
                 $innoShipData = $this->dataObjectFactory->create(
@@ -160,10 +163,22 @@ class Label extends Action
 
                 $pdfContent = $this->service->makeRequest("/api/Label/by-courier/$courierId/awb/$awb?type=pdf&format=".(string)$this->config->getLabelformat()."&UseFile=false", [], 'get');
 
+                // A failed request has no 'contents': the PDF headers used to go out anyway, so the admin
+                // downloaded a broken "PDF" holding the error text.
+                $pdf = empty($pdfContent['success']) || !isset($pdfContent['contents'])
+                    ? false
+                    : base64_decode((string) $pdfContent['contents'], true);
+                if ($pdf === false || $pdf === '') {
+                    throw new \RuntimeException(
+                        'InnoShip label request failed: ' . ($pdfContent['status_code'] ?? '') . ' '
+                        . substr((string) ($pdfContent['status_message'] ?? 'empty label'), 0, 500)
+                    );
+                }
+
                 // Set response headers for PDF download
                 $this->getResponse()->setHeader('Content-Type', 'application/pdf');
                 $this->getResponse()->setHeader('Content-Disposition', 'attachment; filename="' . $track->getTrackNumber() . '.pdf"');
-                $this->getResponse()->setBody(base64_decode($pdfContent['contents']));
+                $this->getResponse()->setBody($pdf);
                 return;
             } catch (\Throwable $exception) {
                 // SECURITY: Log detailed error but show generic message to admin
@@ -174,11 +189,9 @@ class Label extends Action
                 $html.= __('Error generating label. Please check logs for details.');
                 continue;
             }
-
-            $hasTracks = true;
         }
 
-        $html .= $hasTracks ? __('Downloading...') : __('No AWBs found!');
+        $html .= $hasTracks ? '' : __('No AWBs found!');
         $html .= ' <button type="button" onclick="window.close()">' . __('Close window') . '</button>';
 
         $this->getResponse()->setBody($html);

@@ -8,27 +8,27 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
-use Magento\Quote\Model\MaskedQuoteIdToQuoteIdInterface;
+use InnoShip\InnoShip\Model\SessionQuoteId;
 
 class Getpudo extends Action
 {
     private $_resourceConnection;
     private $resultJsonFactory;
     public $quoteRepository;
-    private $maskedQuoteIdToQuoteId;
+    private $sessionQuoteId;
 
     public function __construct(
         Context $context,
         ResourceConnection $resourceConnection,
         JsonFactory $resultJsonFactory,
         CartRepositoryInterface $quoteRepository,
-        MaskedQuoteIdToQuoteIdInterface $maskedQuoteIdToQuoteId
+        SessionQuoteId $sessionQuoteId
     )
     {
         $this->_resourceConnection = $resourceConnection;
         $this->resultJsonFactory = $resultJsonFactory;
         $this->quoteRepository = $quoteRepository;
-        $this->maskedQuoteIdToQuoteId = $maskedQuoteIdToQuoteId;
+        $this->sessionQuoteId = $sessionQuoteId;
         parent::__construct($context);
     }
 
@@ -52,10 +52,12 @@ class Getpudo extends Action
             ]);
         }
 
-        try {
-            $quoteIdNr = $this->maskedQuoteIdToQuoteId->execute($quoteId);
-        } catch (\Exception $exception) {
-            $quoteIdNr = $quoteId;
+        // Only the visitor's own quote (checkout session).
+        $quoteIdNr = $this->sessionQuoteId->resolve($quoteId);
+        if ($quoteIdNr === null) {
+            return $resultJson->setData([
+                'error' => __('Unable to load pickup points. Please try again.')
+            ]);
         }
 
         $allPudo = [];
