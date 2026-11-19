@@ -198,12 +198,31 @@ class ApiTest extends Command
             //                "async"              => true,
             //                "getParcelsBarcodes" => false,
             //            ],
-            "externalClientLocation" => "1",
+            "externalClientLocation" => $this->getExternalClientLocation(),
             //            "externalOrderId"        => null,
             //            "metadata"               => "extra data information",
             //            "sourceChannel"          => "ONLINE",
             //            "observation"            => "Call one hour before",
             //            "customAttributes"       => null,
         ];
+    }
+
+    /**
+     * First sender location from the "external_id_send" config, as Model\Carrier uses it.
+     *
+     * @return string
+     *
+     * @throws \Exception
+     */
+    protected function getExternalClientLocation(): string
+    {
+        $locations = explode(',', (string) $this->config->getExternalIdSend());
+        $location  = trim($locations[0]);
+
+        if ($location === '') {
+            throw new \Exception('InnoShip external client location (external_id_send) is not configured.');
+        }
+
+        return $location;
     }
 }

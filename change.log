@@ -97,6 +97,7 @@
         - City import no longer skips regions whose code is longer than 10 characters (RO Bistrita-Nasaud, Caras-Severin, most PL/FI/LV regions had no cities)
         - City import keeps the locality's lowest street postcode within its most common 2-digit prefix (a stray code such as Bistrita 042020 never wins) instead of the first street's, so a city's postcode no longer changes with the InnoShip API's street order (Cluj-Napoca 400001 had become 400496)
         - `innoship:externalid` no longer says it truncates the table before the answer is validated
+        - `innoship:api:test` sends the first configured sender location (`external_id_send`) instead of a fixed "1" (400 "Value of field ExternalClientLocation is not valid" on other accounts)
         - Locker map (`pudo/getmap`): security hardening
         - `db_schema_whitelist.json` added; index `INNOSHIP_PUDO_COUNTRY_POSTCODE` on `innoship_pudo` (countryCode, postalCode)
     - Compatibility with Magento 2.4.9

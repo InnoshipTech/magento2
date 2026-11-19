@@ -32,9 +32,14 @@ bin/magento setup:upgrade
 bin/magento cache:flush
 ```
 
-This package provides the override for:
+This package provides the overrides for:
 
-- `Amasty_CheckoutCore/web/template/onepage/shipping/methods.html`
+- `Amasty_CheckoutCore/web/template/onepage/shipping/methods.html` (required by InnoShip)
+- `Amasty_CheckoutCore/web/template/onepage/billing-address/details.html` (prints the billing company, which Amasty leaves out)
+
+The package registers the theme `frontend/InnoShip/InnoShip` (parent `Magento/luma`). A store with its own theme copies the two files into `app/design/frontend/<Vendor>/<theme>/Amasty_CheckoutCore/web/template/onepage/` instead of installing the package.
+
+Both packages are versioned with git tags (`1.4.0`, `1.0.0`, ...); `composer show -a innoship/module-innoship` lists the available versions.
 
 ## Features
 
